@@ -11,6 +11,31 @@ A powerful local AI agent orchestration system that works with free AI models (O
 - **Session management**: Persistent sessions with export/import
 - **CLI & API**: Interactive CLI, FastAPI web server, WebSocket support
 
+## Experimental Game Concepts
+
+This repository also contains experimental game concepts that demonstrate creative AI-driven ideation and system prototyping capabilities:
+
+| Game Title | Core Theme | Unique Mechanic | Development Status |
+|------------|------------|-----------------|-------------------|
+| **Chrono-Scroll** | Time manipulation | Non-linear timeline system | Concept |
+| **Echo-Babel** | Spatial puzzles | Language-frequency coupling | Concept |
+| **Neural Dawn** | AI control simulation | Brain-computer interface | Concept |
+| **Ecology Paradox** | Ecosystem restoration | Dynamic balance simulation | Concept |
+| **Mimetic Market** | Skill acquisition | Memory absorption | Concept |
+
+### Game Concepts Documentation
+
+For detailed documentation of these experimental game concepts including gameplay mechanics, technical implementations, and development challenges, please see the `game-concepts/` directory:
+
+- [game-concepts.md](./game-concepts.md) - Overview summary
+- [chrono-scroll.md](./game-concepts/chrono-scroll.md) - Chrono-Scroll concept
+- [echo-babel.md](./game-concepts/echo-babel.md) - Echo-Babel concept
+- [neural-dawn.md](./game-concepts/neural-dawn.md) - Neural Dawn concept
+- [ecology-paradox.md](./game-concepts/ecology-paradox.md) - Ecology Paradox concept
+- [mimetic-market.md](./game-concepts/mimetic-market.md) - Mimetic Market concept
+
+These concepts were generated using the AI Orchestrator's capabilities and represent experimental approaches to game design, exploring innovative gameplay mechanics through the lens of AI-assisted creativity.
+
 ## Quick Start
 
 ### Windows
