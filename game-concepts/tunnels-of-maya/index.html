@@ -1867,10 +1867,18 @@ function animate() {
   playerPos.z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, playerPos.z));
   playerPos.y = 1.7;
 
+  const isMoving = moveState.forward || moveState.backward || moveState.left || moveState.right;
+  const bobSpeed = moveState.sprint ? 12 : 8;
+  const bobAmount = isMoving ? 0.04 : 0;
+  const bobY = Math.sin(time * bobSpeed) * bobAmount;
+  const bobX = Math.cos(time * bobSpeed * 0.5) * bobAmount * 0.3;
+
   camera.position.copy(playerPos);
+  camera.position.y += bobY;
+  camera.position.x += bobX;
   camera.rotation.order = 'YXZ';
   camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
+  camera.rotation.x = pitch + (isMoving ? Math.sin(time * bobSpeed) * 0.003 : 0);
 
   const time = performance.now() * 0.001;
   for(const g of glowObjects) {
