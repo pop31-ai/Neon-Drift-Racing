@@ -38,7 +38,7 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 #guide-panel .guide-text { line-height:1.5; }
 #guide-panel .guide-avatar { font-size:20px; margin-right:8px; }
 
-#wisdom-panel {
+#wisdomPanel {
   position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
   background:rgba(10,5,8,0.92); border:1px solid #c9a84c;
   border-radius:16px; padding:24px 32px; color:#e8d48b;
@@ -46,11 +46,11 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
   box-shadow:0 0 40px rgba(201,168,76,0.4);
   display:none; z-index:20;
 }
-#wisdom-panel .wisdom-title { font-size:12px; text-transform:uppercase; letter-spacing:3px; color:#c9a84c; margin-bottom:12px; }
-#wisdom-panel .wisdom-text { font-size:18px; line-height:1.6; font-style:italic; }
-#wisdom-panel .wisdom-lang { font-size:11px; color:#a89060; margin-top:6px; }
-#wisdom-panel .wisdom-close { margin-top:16px; padding:8px 24px; background:#c9a84c; color:#0a0508; border:none; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold; }
-#wisdom-panel .wisdom-close:hover { background:#e8d48b; }
+#wisdomPanel .wisdom-title { font-size:12px; text-transform:uppercase; letter-spacing:3px; color:#c9a84c; margin-bottom:12px; }
+#wisdomPanel .wisdom-text { font-size:18px; line-height:1.6; font-style:italic; }
+#wisdomPanel .wisdom-lang { font-size:11px; color:#a89060; margin-top:6px; }
+#wisdomPanel .wisdom-close { margin-top:16px; padding:8px 24px; background:#c9a84c; color:#0a0508; border:none; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold; }
+#wisdomPanel .wisdom-close:hover { background:#e8d48b; }
 
 #hint-btn {
   position:absolute; top:15px; left:50%; transform:translateX(-50%);
@@ -178,7 +178,7 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 
   <button id="exit-btn" onclick="exitGame()">✖ Выход (Q)</button>
 
-  <div id="wisdom-panel">
+  <div id="wisdomPanel">
     <div class="wisdom-title">Мудрость Веков</div>
     <div class="wisdom-text" id="wisdomText"></div>
     <div class="wisdom-lang" id="wisdomLang"></div>
