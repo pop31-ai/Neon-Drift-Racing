@@ -1045,6 +1045,7 @@ function showNextGuideMessage() {
 }
 
 function showWisdom() {
+  document.exitPointerLock();
   const w = WISDOMS[Math.floor(Math.random()*WISDOMS.length)];
   document.getElementById('wisdomText').innerHTML =
     `"${w.ru}"<br><br><em>${w.la}</em><br><em>${w.en}</em>`;
@@ -1054,6 +1055,7 @@ function showWisdom() {
 
 function closeWisdom() {
   document.getElementById('wisdomPanel').style.display = 'none';
+  document.getElementById('gameCanvas').requestPointerLock();
 }
 
 function exitGame() {
