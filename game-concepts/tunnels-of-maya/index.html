@@ -553,6 +553,8 @@ function startAmbient() {
 }
 
 let dustParticles = null;
+let emberParticles = null;
+let sparkleParticles = null;
 let highlightRings = [];
 
 function createDustParticles(count) {
@@ -569,6 +571,51 @@ function createDustParticles(count) {
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
   const mat = new THREE.PointsMaterial({
     color: 0xc9a84c, size: 0.04, transparent: true, opacity: 0.4,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const points = new THREE.Points(geo, mat);
+  scene.add(points);
+  return points;
+}
+
+function createEmberParticles(count) {
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const velocities = new Float32Array(count * 3);
+  for(let i = 0; i < count; i++) {
+    positions[i*3] = (Math.random()-0.5) * 16;
+    positions[i*3+1] = Math.random() * 3 + 0.5;
+    positions[i*3+2] = (Math.random()-0.5) * 16;
+    velocities[i*3] = (Math.random()-0.5) * 0.01;
+    velocities[i*3+1] = 0.005 + Math.random() * 0.015;
+    velocities[i*3+2] = (Math.random()-0.5) * 0.01;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.userData = { velocities };
+  const mat = new THREE.PointsMaterial({
+    color: 0xff6622, size: 0.06, transparent: true, opacity: 0.8,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const points = new THREE.Points(geo, mat);
+  scene.add(points);
+  return points;
+}
+
+function createSparkleParticles(positions) {
+  if(!positions || positions.length === 0) return null;
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(positions.length * 3);
+  const speeds = new Float32Array(positions.length);
+  for(let i = 0; i < positions.length; i++) {
+    posArr[i*3] = positions[i].x + (Math.random()-0.5) * 0.5;
+    posArr[i*3+1] = positions[i].y + Math.random() * 0.5;
+    posArr[i*3+2] = positions[i].z + (Math.random()-0.5) * 0.5;
+    speeds[i] = 0.5 + Math.random() * 1.5;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  geo.userData = { speeds, basePositions: positions };
+  const mat = new THREE.PointsMaterial({
+    color: 0xffdd44, size: 0.05, transparent: true, opacity: 0.7,
     sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false
   });
   const points = new THREE.Points(geo, mat);
@@ -985,6 +1032,8 @@ function clearLevel() {
   laserBeams = [];
   doors = [];
   dustParticles = null;
+  emberParticles = null;
+  sparkleParticles = null;
   highlightRings = [];
 
   const ambLight = new THREE.AmbientLight(0x1a0f0a, 0.3);
@@ -1174,6 +1223,14 @@ function buildLevel(levelIndex) {
   if(dustParticles) {
     dustParticles.material.color.setHex(theme.accent);
   }
+
+  emberParticles = createEmberParticles(40);
+
+  const sparklePositions = interactiveObjects
+    .filter(o => o.type === 'lever' || o.type === 'prism')
+    .map(o => o.mesh.position.clone());
+  sparkleParticles = createSparkleParticles(sparklePositions);
+
   highlightRings = [];
   for(const obj of interactiveObjects) {
     if(obj.type === 'lever' || obj.type === 'pillar' || obj.type === 'mirror' || obj.type === 'prism') {
@@ -1904,6 +1961,36 @@ function animate() {
       if(pos.array[i*3+1] < 0) pos.array[i*3+1] = 4;
     }
     pos.needsUpdate = true;
+  }
+
+  if(emberParticles) {
+    const epos = emberParticles.geometry.attributes.position;
+    const vels = emberParticles.geometry.userData.velocities;
+    for(let i = 0; i < epos.count; i++) {
+      epos.array[i*3] += vels[i*3] + Math.sin(time + i) * 0.002;
+      epos.array[i*3+1] += vels[i*3+1];
+      epos.array[i*3+2] += vels[i*3+2] + Math.cos(time + i) * 0.002;
+      if(epos.array[i*3+1] > 4) {
+        epos.array[i*3] = (Math.random()-0.5)*16;
+        epos.array[i*3+1] = 0.5;
+        epos.array[i*3+2] = (Math.random()-0.5)*16;
+      }
+    }
+    epos.needsUpdate = true;
+    emberParticles.material.opacity = 0.5 + Math.sin(time * 3) * 0.3;
+  }
+
+  if(sparkleParticles) {
+    const spos = sparkleParticles.geometry.attributes.position;
+    const spd = sparkleParticles.geometry.userData.speeds;
+    const base = sparkleParticles.geometry.userData.basePositions;
+    for(let i = 0; i < spos.count; i++) {
+      const bi = i % base.length;
+      spos.array[i*3] = base[bi].x + Math.sin(time * spd[i] + i) * 0.3;
+      spos.array[i*3+1] = base[bi].y + Math.abs(Math.sin(time * spd[i] * 0.7 + i)) * 0.5;
+      spos.array[i*3+2] = base[bi].z + Math.cos(time * spd[i] + i) * 0.3;
+    }
+    spos.needsUpdate = true;
   }
 
   for(const hr of highlightRings) {
