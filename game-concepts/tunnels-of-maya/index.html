@@ -163,6 +163,25 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 }
 #fade-overlay.active .fade-text { opacity:1; }
 
+#compass {
+  position:absolute; bottom:90px; left:50%; transform:translateX(-50%);
+  width:60px; height:60px; border-radius:50%;
+  background:rgba(10,5,8,0.8); border:1px solid #c9a84c44;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 12px rgba(201,168,76,0.15);
+}
+#compass-arrow {
+  width:0; height:0;
+  border-left:6px solid transparent; border-right:6px solid transparent;
+  border-bottom:24px solid #c9a84c;
+  filter:drop-shadow(0 0 4px rgba(201,168,76,0.6));
+  transition: transform 0.15s;
+}
+#compass-label {
+  position:absolute; bottom:70px; left:50%; transform:translateX(-50%);
+  font-size:10px; color:#a89060; white-space:nowrap;
+}
+
 #pause-menu {
   position:fixed; top:0; left:0; width:100%; height:100%;
   background:rgba(10,5,8,0.92); z-index:60;
@@ -235,6 +254,11 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
   <div id="minimap"><canvas id="minimapCanvas" width="120" height="120"></canvas></div>
 
   <div id="crosshair"></div>
+
+  <div id="compass">
+    <div id="compass-arrow"></div>
+  </div>
+  <div id="compass-label">цель</div>
 
   <div id="guide-panel">
     <div class="guide-name"><span class="guide-avatar">🤖</span> БОТ-7 — Навигатор</div>
@@ -1899,11 +1923,62 @@ function animate() {
     }
   }
 
+  updateCompass();
   updateMinimap();
   updateInteractionPrompt();
 
   renderNightVisionOverlay(time);
   renderer.render(scene, camera);
+}
+
+function updateCompass() {
+  if(corridorMode) return;
+  let target = null;
+  let minDist = Infinity;
+
+  for(const obj of interactiveObjects) {
+    if(obj.type === 'door' && !obj.open) {
+      target = obj.mesh.position;
+      break;
+    }
+  }
+  if(!target) {
+    for(const obj of interactiveObjects) {
+      if(obj.type === 'receiver' && !obj.activated) {
+        const d = playerPos.distanceTo(new THREE.Vector3(obj.mesh.position.x, playerPos.y, obj.mesh.position.z));
+        if(d < minDist) { minDist = d; target = obj.mesh.position; }
+      }
+    }
+  }
+  if(!target) {
+    for(const obj of interactiveObjects) {
+      if((obj.type === 'lever' || obj.type === 'prism' || obj.type === 'pillar' || obj.type === 'mirror') && !obj.solved && !obj.activated) {
+        const d = playerPos.distanceTo(new THREE.Vector3(obj.mesh.position.x, playerPos.y, obj.mesh.position.z));
+        if(d < minDist) { minDist = d; target = obj.mesh.position; }
+      }
+    }
+  }
+
+  if(!target) {
+    document.getElementById('compass-arrow').style.transform = 'scale(0)';
+    document.getElementById('compass-label').textContent = '';
+    return;
+  }
+
+  const dx = target.x - playerPos.x;
+  const dz = target.z - playerPos.z;
+  const angleToTarget = Math.atan2(dx, dz);
+  const angleDiff = angleToTarget - yaw;
+  const degrees = ((angleDiff * 180 / Math.PI) % 360 + 540) % 360 - 180;
+
+  document.getElementById('compass-arrow').style.transform = `rotate(${degrees}deg)`;
+
+  const dist = Math.floor(minDist);
+  let label = '';
+  if(minDist < 2) label = 'рядом!';
+  else if(minDist < 5) label = `${dist}м`;
+  else label = `${dist}м →`;
+  document.getElementById('compass-label').textContent = label;
 }
 
 function updateMinimap() {
