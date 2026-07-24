@@ -311,6 +311,7 @@ function createGlowMaterial(color=0x4a9, emissiveIntensity=1.5) {
 }
 
 function addGlowLight(pos, color, intensity=2, dist=8) {
+  if(glowObjects.filter(o=>o.isLight).length >= 30) return null;
   const pl = new THREE.PointLight(color, intensity, dist);
   pl.position.copy(pos);
   scene.add(pl);
@@ -1143,7 +1144,7 @@ function checkPuzzleSolved() {
   }
 
   if(solved) {
-    const doorObj = doors.find(d=>!d.open);
+    const doorObj = interactiveObjects.find(o=>o.type==='door' && !o.open);
     if(doorObj) {
       openDoor(doorObj);
       const pts = SCORE_PER_LEVEL[currentLevel] || 100;
@@ -1175,7 +1176,6 @@ function checkPlayerAtReceiver() {
     if(dist < 1.2) {
       r.activated = true;
       r.mesh.children[1].material.emissiveIntensity = 3;
-      addGlowLight(rp.clone(), 0x00ff88, 2, 5);
       checkPuzzleSolved();
     }
   }
@@ -1245,15 +1245,11 @@ function interactWithClosest() {
       closest.solved = true;
       closest.mesh.children[0].material.emissive = new THREE.Color(0xffffff);
       closest.mesh.children[0].material.emissiveIntensity = 2;
-      addGlowLight(closest.mesh.position.clone(), 0xffffff, 2, 6);
 
       const receivers = interactiveObjects.filter(o => o.type === 'receiver');
       receivers.forEach(r => {
-        if(!r.activated) {
-          r.activated = true;
-          r.mesh.children[1].material.emissiveIntensity = 3;
-          addGlowLight(r.mesh.position.clone(), 0x00ff88, 2, 5);
-        }
+        r.activated = true;
+        r.mesh.children[1].material.emissiveIntensity = 3;
       });
 
       checkPuzzleSolved();
