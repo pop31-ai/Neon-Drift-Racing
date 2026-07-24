@@ -132,6 +132,23 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 }
 
 .puzzle-object { cursor:pointer; }
+
+#nightvision-overlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  pointer-events:none; z-index:5; display:none;
+  mix-blend-mode: screen;
+}
+#nightvision-overlay.active { display:block; }
+#nightvision-overlay canvas { width:100%; height:100%; }
+
+#nv-btn {
+  position:absolute; top:15px; left:50%; transform:translateX(40px);
+  padding:8px 16px; background:rgba(10,5,8,0.85); border:1px solid #22c55e;
+  border-radius:20px; color:#4ade80; font-size:13px; cursor:pointer;
+  box-shadow:0 0 15px rgba(34,197,94,0.3);
+}
+#nv-btn:hover { background:rgba(34,197,94,0.2); }
+#nv-btn.active { background:rgba(34,197,94,0.3); border-color:#4ade80; box-shadow:0 0 20px rgba(34,197,94,0.5); }
 </style>
 </head>
 <body>
@@ -155,6 +172,7 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 </div>
 
 <canvas id="gameCanvas"></canvas>
+<canvas id="nightvision-overlay"></canvas>
 
 <div id="ui-overlay">
   <div id="score-panel">
@@ -164,6 +182,7 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
   </div>
 
   <button id="hint-btn" onclick="showHint()">💡 Подсказка (H)</button>
+  <button id="nv-btn" onclick="toggleNightVision()">🌙 Ночное зрение (N)</button>
 
   <div id="minimap"><canvas id="minimapCanvas" width="120" height="120"></canvas></div>
 
@@ -1313,6 +1332,7 @@ function animate() {
   updateMinimap();
   updateInteractionPrompt();
 
+  renderNightVisionOverlay(time);
   renderer.render(scene, camera);
 }
 
@@ -1399,6 +1419,63 @@ function updateInteractionPrompt() {
   }
 }
 
+let nightVision = false;
+let nvCtx = null;
+
+function toggleNightVision() {
+  nightVision = !nightVision;
+  const overlay = document.getElementById('nightvision-overlay');
+  const btn = document.getElementById('nv-btn');
+  overlay.classList.toggle('active', nightVision);
+  btn.classList.toggle('active', nightVision);
+
+  if(nightVision && !nvCtx) {
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+    nvCtx = overlay.getContext('2d');
+  }
+
+  scene.fog = nightVision
+    ? new THREE.FogExp2(0x001a00, 0.015)
+    : new THREE.FogExp2(0x0a0508, 0.04);
+
+  const amb = scene.children.find(c => c.isAmbientLight);
+  if(amb) {
+    amb.color.setHex(nightVision ? 0x003300 : 0x1a0f0a);
+    amb.intensity = nightVision ? 1.5 : 0.3;
+  }
+}
+
+function renderNightVisionOverlay(time) {
+  if(!nightVision || !nvCtx) return;
+  const w = nvCtx.canvas.width, h = nvCtx.canvas.height;
+  nvCtx.clearRect(0, 0, w, h);
+
+  nvCtx.fillStyle = 'rgba(0,40,0,0.15)';
+  nvCtx.fillRect(0, 0, w, h);
+
+  for(let y = 0; y < h; y += 3) {
+    nvCtx.fillStyle = `rgba(0,${20+Math.sin(y*0.1+time*3)*15},0,0.08)`;
+    nvCtx.fillRect(0, y, w, 1);
+  }
+
+  const scanY = (time * 80) % h;
+  nvCtx.fillStyle = 'rgba(0,255,0,0.06)';
+  nvCtx.fillRect(0, scanY, w, 3);
+
+  const gradient = nvCtx.createRadialGradient(w/2, h/2, h*0.2, w/2, h/2, h*0.8);
+  gradient.addColorStop(0, 'rgba(0,0,0,0)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0.5)');
+  nvCtx.fillStyle = gradient;
+  nvCtx.fillRect(0, 0, w, h);
+
+  for(let i = 0; i < 12; i++) {
+    const sx = Math.random()*w, sy = Math.random()*h;
+    nvCtx.fillStyle = `rgba(0,${180+Math.random()*75},0,${0.1+Math.random()*0.2})`;
+    nvCtx.fillRect(sx, sy, 1+Math.random()*2, 1);
+  }
+}
+
 function setupInput() {
   document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
@@ -1410,6 +1487,7 @@ function setupInput() {
     if(e.code === 'KeyE') interactWithClosest();
     if(e.code === 'KeyH') showHint();
     if(e.code === 'KeyQ') exitGame();
+    if(e.code === 'KeyN') toggleNightVision();
     if(e.code === 'Escape') {
       document.exitPointerLock();
     }
@@ -1459,6 +1537,10 @@ function setupInput() {
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if(nvCtx) {
+      nvCtx.canvas.width = window.innerWidth;
+      nvCtx.canvas.height = window.innerHeight;
+    }
   });
 }
 
@@ -1478,6 +1560,7 @@ function animateIntro() {
 window.showHint = showHint;
 window.closeWisdom = closeWisdom;
 window.exitGame = exitGame;
+window.toggleNightVision = toggleNightVision;
 
 setupInput();
 animateIntro();
