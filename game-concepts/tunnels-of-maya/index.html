@@ -335,6 +335,91 @@ function sfxDoorOpen() { playSound(110, 0.8, 'sawtooth', 0.08); setTimeout(()=>p
 function sfxWisdom() { playSound(392, 0.5, 'sine', 0.1); setTimeout(()=>playSound(523, 0.5, 'sine', 0.1), 300); setTimeout(()=>playSound(659, 0.8, 'sine', 0.12), 600); }
 function sfxActivate() { playSound(880, 0.15, 'sine', 0.1); playSound(1100, 0.1, 'sine', 0.07); }
 
+let ambientDrone = null;
+let ambientStarted = false;
+let dripInterval = null;
+
+function startAmbient() {
+  if(ambientStarted) return;
+  ambientStarted = true;
+  try {
+    const ctx = getAudioCtx();
+
+    ambientDrone = ctx.createOscillator();
+    const droneGain = ctx.createGain();
+    ambientDrone.type = 'sine';
+    ambientDrone.frequency.setValueAtTime(55, ctx.currentTime);
+    droneGain.gain.setValueAtTime(0.04, ctx.currentTime);
+
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.15, ctx.currentTime);
+    lfoGain.gain.setValueAtTime(0.02, ctx.currentTime);
+    lfo.connect(lfoGain);
+    lfoGain.connect(droneGain.gain);
+    lfo.start();
+
+    ambientDrone.connect(droneGain);
+    droneGain.connect(ctx.destination);
+    ambientDrone.start();
+
+    const drone2 = ctx.createOscillator();
+    const droneGain2 = ctx.createGain();
+    drone2.type = 'sawtooth';
+    drone2.frequency.setValueAtTime(82.5, ctx.currentTime);
+    droneGain2.gain.setValueAtTime(0.015, ctx.currentTime);
+    drone2.connect(droneGain2);
+    droneGain2.connect(ctx.destination);
+    drone2.start();
+
+    dripInterval = setInterval(()=>{
+      if(Math.random() < 0.3) {
+        const freq = 1800 + Math.random() * 1200;
+        const dripOsc = ctx.createOscillator();
+        const dripGain = ctx.createGain();
+        dripOsc.type = 'sine';
+        dripOsc.frequency.setValueAtTime(freq, ctx.currentTime);
+        dripOsc.frequency.exponentialRampToValueAtTime(freq * 0.3, ctx.currentTime + 0.08);
+        dripGain.gain.setValueAtTime(0.06, ctx.currentTime);
+        dripGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        dripOsc.connect(dripGain);
+        dripGain.connect(ctx.destination);
+        dripOsc.start();
+        dripOsc.stop(ctx.currentTime + 0.15);
+      }
+    }, 2000);
+
+    const windNoise = () => {
+      if(!ambientStarted) return;
+      const bufSize = ctx.sampleRate * 2;
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for(let i = 0; i < bufSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.3;
+        if(i > 0) data[i] = data[i] * 0.3 + data[i-1] * 0.7;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const windGain = ctx.createGain();
+      windGain.gain.setValueAtTime(0, ctx.currentTime);
+      windGain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 1);
+      windGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 3);
+      const windFilter = ctx.createBiquadFilter();
+      windFilter.type = 'bandpass';
+      windFilter.frequency.setValueAtTime(200 + Math.random()*300, ctx.currentTime);
+      windFilter.Q.setValueAtTime(2, ctx.currentTime);
+      src.connect(windFilter);
+      windFilter.connect(windGain);
+      windGain.connect(ctx.destination);
+      src.start();
+      src.stop(ctx.currentTime + 3);
+      setTimeout(windNoise, 4000 + Math.random() * 8000);
+    };
+    setTimeout(windNoise, 2000);
+  } catch(e) {}
+}
+
 let dustParticles = null;
 let highlightRings = [];
 
@@ -1797,6 +1882,7 @@ function setupInput() {
   document.getElementById('startBtn').addEventListener('click', () => {
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('gameCanvas').requestPointerLock();
+    startAmbient();
 
     const save = localStorage.getItem('maya_tunnel_save');
     if(save) {
