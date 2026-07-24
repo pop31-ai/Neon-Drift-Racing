@@ -200,6 +200,30 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 #pause-menu button:hover { background:rgba(201,168,76,0.25); }
 #pause-menu .pause-stats { margin-top:20px; font-size:12px; color:#7a6a4a; text-align:center; line-height:1.8; }
 
+#level-results {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(10,5,8,0.93); z-index:55;
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+}
+#level-results.active { display:flex; }
+#level-results h2 { font-size:28px; color:#c9a84c; margin-bottom:4px; }
+#level-results .lr-level { font-size:14px; color:#a89060; margin-bottom:20px; }
+#level-results .lr-row {
+  display:flex; justify-content:space-between; width:280px;
+  padding:5px 0; border-bottom:1px solid #c9a84c22;
+  font-size:14px; color:#e8d48b;
+}
+#level-results .lr-row .lr-label { color:#a89060; }
+#level-results .lr-row.lr-total { border-top:2px solid #c9a84c; border-bottom:none; font-weight:bold; font-size:16px; color:#ffe9a0; padding-top:8px; }
+#level-results .lr-time { margin-top:12px; font-size:12px; color:#7a6a4a; }
+#level-results button {
+  margin-top:20px; padding:12px 30px; background:#c9a84c;
+  border:none; border-radius:10px; color:#0a0508;
+  font-size:15px; font-weight:bold; cursor:pointer;
+}
+#level-results button:hover { background:#e8d48b; }
+
 #combo-display {
   position:absolute; top:80px; right:15px;
   padding:6px 14px; border-radius:8px;
@@ -288,6 +312,14 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
   <button onclick="restartGame()">Начать заново</button>
   <button onclick="exitToMenu()">Выйти в меню</button>
   <div class="pause-stats" id="pauseStats"></div>
+</div>
+
+<div id="level-results">
+  <h2 id="lrTitle">Уровень пройден!</h2>
+  <div class="lr-level" id="lrLevel"></div>
+  <div id="lrRows"></div>
+  <div class="lr-time" id="lrTime"></div>
+  <button onclick="dismissResults()">Продолжить →</button>
 </div>
 
 <script type="importmap">
@@ -1668,6 +1700,37 @@ function exitToMenu() {
   document.querySelector('#completion-screen p').textContent = 'Прогресс сохранён. Вернитесь когда захотите!';
 }
 
+let resultsCallback = null;
+
+function showResults(baseScore, hintBonus, comboBonus, elapsed, cb) {
+  resultsCallback = cb;
+  const total = baseScore + hintBonus + comboBonus;
+  document.getElementById('lrTitle').textContent = 'Уровень пройден!';
+  document.getElementById('lrLevel').textContent =
+    `${LEVEL_THEMES[currentLevel]?.name || 'Тоннели'} — ${Math.floor(elapsed)}с`;
+
+  const rows = [
+    ['Основные очки', `+${baseScore}`],
+    ['Без подсказки', hintBonus > 0 ? `+${hintBonus}` : '—'],
+    [`Скорость (×${comboMultiplier.toFixed(1)})`, comboBonus > 0 ? `+${comboBonus}` : '—'],
+  ];
+
+  let html = '';
+  for(const [label, val] of rows) {
+    html += `<div class="lr-row"><span class="lr-label">${label}</span><span>${val}</span></div>`;
+  }
+  html += `<div class="lr-row lr-total"><span>ИТОГО</span><span>${total}</span></div>`;
+  document.getElementById('lrRows').innerHTML = html;
+  document.getElementById('lrTime').textContent = `Время: ${Math.floor(elapsed)}с`;
+  document.getElementById('level-results').classList.add('active');
+}
+
+function dismissResults() {
+  document.getElementById('level-results').classList.remove('active');
+  document.getElementById('gameCanvas').requestPointerLock();
+  if(resultsCallback) { resultsCallback(); resultsCallback = null; }
+}
+
 function addScore(pts) {
   score += pts;
   document.getElementById('scoreDisplay').textContent = score;
@@ -1784,8 +1847,10 @@ function checkPuzzleSolved() {
 
       setTimeout(()=>{
         if(currentLevel < LEVEL_COUNT - 1) {
-          fadeTransition('Движение по тоннелю...', () => {
-            buildCorridor(currentLevel);
+          showResults(pts, hintBonus, comboBonus, elapsed, () => {
+            fadeTransition('Движение по тоннелю...', () => {
+              buildCorridor(currentLevel);
+            });
           });
         } else {
           document.getElementById('finalScore').textContent = score;
@@ -2306,6 +2371,7 @@ window.toggleNightVision = toggleNightVision;
 window.resumeGame = resumeGame;
 window.restartGame = restartGame;
 window.exitToMenu = exitToMenu;
+window.dismissResults = dismissResults;
 
 setupInput();
 animateIntro();
