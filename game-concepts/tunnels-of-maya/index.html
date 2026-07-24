@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Тоннели Майя — Головоломки Великих Пирамид</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
+#gameCanvas { display:block; width:100vw; height:100vh; }
+
+#ui-overlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  pointer-events:none; z-index:10;
+}
+#ui-overlay > * { pointer-events:auto; }
+
+#score-panel {
+  position:absolute; top:15px; right:15px;
+  background:rgba(10,5,8,0.85); border:1px solid #c9a84c;
+  border-radius:12px; padding:12px 18px; color:#e8d48b;
+  font-size:14px; text-align:center; min-width:140px;
+  box-shadow:0 0 20px rgba(201,168,76,0.3);
+}
+#score-panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:2px; color:#c9a84c; margin-bottom:5px; }
+#score-panel .score-val { font-size:26px; font-weight:bold; color:#ffe9a0; text-shadow:0 0 10px rgba(255,233,160,0.5); }
+#score-panel .level-info { font-size:12px; color:#a89060; margin-top:4px; }
+
+#guide-panel {
+  position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+  background:rgba(10,5,8,0.9); border:1px solid #4a9;
+  border-radius:16px; padding:16px 24px; color:#b8f0d8;
+  font-size:14px; max-width:600px; width:90%; text-align:center;
+  box-shadow:0 0 30px rgba(68,170,153,0.3);
+  transition: opacity 0.5s;
+}
+#guide-panel .guide-name { color:#4a9; font-weight:bold; font-size:13px; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
+#guide-panel .guide-text { line-height:1.5; }
+#guide-panel .guide-avatar { font-size:20px; margin-right:8px; }
+
+#wisdom-panel {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:rgba(10,5,8,0.92); border:1px solid #c9a84c;
+  border-radius:16px; padding:24px 32px; color:#e8d48b;
+  text-align:center; max-width:500px; width:85%;
+  box-shadow:0 0 40px rgba(201,168,76,0.4);
+  display:none; z-index:20;
+}
+#wisdom-panel .wisdom-title { font-size:12px; text-transform:uppercase; letter-spacing:3px; color:#c9a84c; margin-bottom:12px; }
+#wisdom-panel .wisdom-text { font-size:18px; line-height:1.6; font-style:italic; }
+#wisdom-panel .wisdom-lang { font-size:11px; color:#a89060; margin-top:6px; }
+#wisdom-panel .wisdom-close { margin-top:16px; padding:8px 24px; background:#c9a84c; color:#0a0508; border:none; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold; }
+#wisdom-panel .wisdom-close:hover { background:#e8d48b; }
+
+#hint-btn {
+  position:absolute; top:15px; left:50%; transform:translateX(-50%);
+  padding:8px 20px; background:rgba(10,5,8,0.85); border:1px solid #a855f7;
+  border-radius:20px; color:#d8b4fe; font-size:13px; cursor:pointer;
+  box-shadow:0 0 15px rgba(168,85,247,0.3);
+}
+#hint-btn:hover { background:rgba(168,85,247,0.2); }
+
+#exit-btn {
+  position:absolute; bottom:20px; right:15px;
+  padding:10px 20px; background:rgba(10,5,8,0.85); border:1px solid #ef4444;
+  border-radius:10px; color:#fca5a5; font-size:13px; cursor:pointer;
+  box-shadow:0 0 15px rgba(239,68,68,0.3);
+}
+#exit-btn:hover { background:rgba(239,68,68,0.2); }
+
+#minimap {
+  position:absolute; top:15px; left:15px;
+  width:120px; height:120px; background:rgba(10,5,8,0.8);
+  border:1px solid #c9a84c; border-radius:8px; overflow:hidden;
+  box-shadow:0 0 15px rgba(201,168,76,0.2);
+}
+#minimap canvas { width:100%; height:100%; }
+
+#crosshair {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:6px; height:6px; border:2px solid rgba(201,168,76,0.6);
+  border-radius:50%;
+}
+
+#interaction-prompt {
+  position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+  padding:8px 16px; background:rgba(10,5,8,0.9); border:1px solid #c9a84c;
+  border-radius:8px; color:#e8d48b; font-size:13px; display:none;
+  text-align:center;
+}
+
+#start-screen {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:radial-gradient(ellipse at center, #1a0f0a 0%, #0a0508 70%);
+  z-index:100; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+#start-screen h1 {
+  font-size:48px; color:#c9a84c; text-shadow:0 0 30px rgba(201,168,76,0.6);
+  margin-bottom:8px; letter-spacing:4px;
+}
+#start-screen .subtitle {
+  font-size:16px; color:#a89060; margin-bottom:40px; letter-spacing:2px;
+}
+#start-screen .start-btn {
+  padding:14px 40px; background:linear-gradient(135deg, #c9a84c, #a87c2a);
+  border:none; border-radius:12px; color:#0a0508; font-size:18px;
+  font-weight:bold; cursor:pointer; letter-spacing:1px;
+  box-shadow:0 0 30px rgba(201,168,76,0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+#start-screen .start-btn:hover { transform:scale(1.05); box-shadow:0 0 40px rgba(201,168,76,0.6); }
+#start-screen .start-info { margin-top:30px; color:#7a6a4a; font-size:12px; text-align:center; line-height:1.8; }
+
+#loading-bar {
+  position:absolute; bottom:60px; left:50%; transform:translateX(-50%);
+  width:200px; height:4px; background:rgba(201,168,76,0.2); border-radius:2px; overflow:hidden;
+}
+#loading-fill { height:100%; width:0%; background:#c9a84c; border-radius:2px; transition:width 0.3s; }
+
+#completion-screen {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(10,5,8,0.95); z-index:100;
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+}
+#completion-screen h1 { font-size:36px; color:#c9a84c; margin-bottom:10px; }
+#completion-screen .final-score { font-size:20px; color:#ffe9a0; margin-bottom:30px; }
+#completion-screen .restart-btn {
+  padding:12px 30px; background:#c9a84c; border:none; border-radius:10px;
+  color:#0a0508; font-size:16px; font-weight:bold; cursor:pointer;
+}
+
+.puzzle-object { cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>Тоннели Майя</h1>
+  <div class="subtitle">Головоломки Великих Пирамид</div>
+  <div id="loading-bar"><div id="loading-fill"></div></div>
+  <button class="start-btn" id="startBtn" style="display:none">Начать Путешествие</button>
+  <div class="start-info">
+    WASD — движение &nbsp;|&nbsp; Мышь — обзор &nbsp;|&nbsp; ЛКМ — взаимодействие<br>
+    E — использовать рычаг &nbsp;|&nbsp; H — подсказка &nbsp;|&nbsp; ESC — меню
+  </div>
+</div>
+
+<div id="completion-screen">
+  <h1>Путь Завершён</h1>
+  <div class="final-score">Итого: <span id="finalScore">0</span> очков</div>
+  <p style="color:#a89060; margin-bottom:20px;">Вы прошли все тоннели пирамид!</p>
+  <button class="restart-btn" onclick="location.reload()">Начать заново</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+  <div id="score-panel">
+    <h3>Очки</h3>
+    <div class="score-val" id="scoreDisplay">0</div>
+    <div class="level-info" id="levelDisplay">Уровень 1 / 7</div>
+  </div>
+
+  <button id="hint-btn" onclick="showHint()">💡 Подсказка (H)</button>
+
+  <div id="minimap"><canvas id="minimapCanvas" width="120" height="120"></canvas></div>
+
+  <div id="crosshair"></div>
+
+  <div id="guide-panel">
+    <div class="guide-name"><span class="guide-avatar">🔮</span> Кукулькан — Дух Пирамиды</div>
+    <div class="guide-text" id="guideText">Добро пожаловать, странник. Древние тоннели ждут тебя...</div>
+  </div>
+
+  <div id="interaction-prompt" id="interactPrompt">Нажмите E для взаимодействия</div>
+
+  <button id="exit-btn" onclick="exitGame()">✖ Выход (Q)</button>
+
+  <div id="wisdom-panel">
+    <div class="wisdom-title">Мудрость Веков</div>
+    <div class="wisdom-text" id="wisdomText"></div>
+    <div class="wisdom-lang" id="wisdomLang"></div>
+    <button class="wisdom-close" onclick="closeWisdom()">Продолжить</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const WISDOMS = [
+  { ru: "Путь длиннее знания. Знание длиннее пути.", la: "Via longior est scientia. Scientia longior est via.", en: "The path is longer than knowledge. Knowledge is longer than the path." },
+  { ru: "Тот, кто строит пирамиду, возводит свой дух.", la: "Qui pyramidem aedificat, spiritum suum erigit.", en: "Whoever builds a pyramid raises their spirit." },
+  { ru: "В тоннелях тьмы — свет понимания.", la: "In tenebris túnnelium — lux intellectús.", en: "In the tunnels of darkness — the light of understanding." },
+  { ru: "Камень помнит всё. Будь достоин его памяти.", la: "Lapis meminit omnium. Esto dignus memoria eius.", en: "Stone remembers everything. Be worthy of its memory." },
+  { ru: "Каждый рычаг — выбор. Каждый выбор — судьба.", la: "Omne manubrium — electio. Omnis electio — fútum.", en: "Every lever is a choice. Every choice is destiny." },
+  { ru: "Луч света может открыть дверь, которую не сдвинет гора.", la: "Rádius lucis portam aperire potest, quam mons non movet.", en: "A ray of light can open a door that a mountain cannot move." },
+  { ru: "Мудрость не в ответах, а в умении задавать вопросы.", la: "Sapiéntia non in respónsis, sed in quaeréndo est.", en: "Wisdom lies not in answers, but in knowing how to ask questions." }
+];
+
+const GUIDE_MESSAGES = {
+  welcome: [
+    "Добро пожаловать, странник. Древние тоннели ждут тебя...",
+    "Я — Кукулькан, дух этой пирамиды. Я буду твоим проводником.",
+    "В каждом зале тебя ждёт головоломка. Решай её, чтобы открыть дверь дальше."
+  ],
+  level1: [
+    "Этот зал посвящён Свету. Направь лазер на кристалл, повернув зеркала.",
+    "Используй мышь, чтобы осмотреться. Найди зеркала и призму."
+  ],
+  level2: [
+    "Три рычага управляют дверью. Но не все они нужны!",
+    "Попробуй разные комбинации. Подсказка: два правильных рычага."
+  ],
+  level3: [
+    "Вращающиеся столбики несут символы. Совпади три символа.",
+    "Нажимай на столбики, чтобы крутить их. Помни — время не ждёт!"
+  ],
+  level4: [
+    "Лазер должен пройти через все призмы и попасть в приёмник.",
+    "Призмы разделяют луч на три цвета. Каждый цвет нужен в своём гнезде."
+  ],
+  level5: [
+    "Эти двери требуют правильного порядка нажатия.",
+    "Запомни символы на стенах и нажми их в правильном порядке."
+  ],
+  level6: [
+    "Зеркальный лабиринт! Путь короче, чем кажется.",
+    "Одно зеркало ведёт к цели. Остальные — в тупик."
+  ],
+  level7: [
+    "Последнее испытание. Все навыки пригодятся.",
+    "Объедини свет, рычаги и символы. Финальная дверь откроется!"
+  ],
+  hint1: "Ищи три зеркала и призму. Наведи луч сначала на зеркало, потом на призму.",
+  hint2: "Подойди к рычагам и нажми E. Попробуй средний и левый.",
+  hint3: "Все три столбика должны показать одинаковый символ — золотое солнце.",
+  hint4: "Красный луч в красное гнездо, синий в синее, зелёный в зелёное.",
+  hint5: "Символы: Солнце → Луна → Звезда → Змей. Запомни顺序!",
+  hint6: "Иди только к зеркалам, которые отражают в сторону цели.",
+  hint7: "Последняя комбинация: Красный рычаг → Столбик «Солнце» → Красное зеркало."
+};
+
+let scene, camera, renderer, clock;
+let moveState = { forward:false, backward:false, left:false, right:false, sprint:false };
+let yaw=0, pitch=0, velocity=new THREE.Vector3();
+let isLocked=false;
+let currentLevel=0, score=0;
+let puzzleObjects=[], interactiveObjects=[], glowObjects=[];
+let playerPos=new THREE.Vector3(0,1.7,0);
+let hintUsed=false;
+let guideMessageQueue=[];
+let guideIndex=0;
+
+const keys={};
+let mouseX=0, mouseY=0;
+
+const LEVEL_COUNT = 7;
+const SCORE_PER_LEVEL = [100, 150, 200, 250, 300, 350, 500];
+
+function init() {
+  clock = new THREE.Clock();
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0508);
+  scene.fog = new THREE.FogExp2(0x0a0508, 0.04);
+
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.copy(playerPos);
+
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+
+  const ambLight = new THREE.AmbientLight(0x1a0f0a, 0.3);
+  scene.add(ambLight);
+
+  buildLevel(currentLevel);
+
+  document.getElementById('loading-fill').style.width = '100%';
+  document.getElementById('startBtn').style.display = 'block';
+
+  animate();
+}
+
+function createMayanMaterial(color=0x2a1f15) {
+  return new THREE.MeshStandardMaterial({
+    color, roughness:0.85, metalness:0.1,
+    bumpScale:0.02,
+  });
+}
+
+function createGlowMaterial(color=0x4a9, emissiveIntensity=1.5) {
+  return new THREE.MeshStandardMaterial({
+    color, emissive:color, emissiveIntensity,
+    roughness:0.2, metalness:0.8, transparent:true, opacity:0.9
+  });
+}
+
+function addGlowLight(pos, color, intensity=2, dist=8) {
+  const pl = new THREE.PointLight(color, intensity, dist);
+  pl.position.copy(pos);
+  scene.add(pl);
+  glowObjects.push(pl);
+  return pl;
+}
+
+function createTunnelWall(x,y,z,w,h,d, color=0x2a1f15) {
+  const geo = new THREE.BoxGeometry(w,h,d);
+  const mat = createMayanMaterial(color);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function createFloor(x,z,w,d) {
+  const geo = new THREE.PlaneGeometry(w,d);
+  const mat = createMayanMaterial(0x1a1210);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI/2;
+  mesh.position.set(x, 0, z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function createDecorGlyph(x,y,z) {
+  const geo = new THREE.PlaneGeometry(0.8,0.8);
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xc9a84c, emissive:0xc9a84c, emissiveIntensity:0.3,
+    roughness:0.4, metalness:0.6
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  scene.add(mesh);
+  glowObjects.push(mesh);
+  return mesh;
+}
+
+function createDecorSkull(x,y,z) {
+  const geo = new THREE.SphereGeometry(0.15,8,8);
+  const mat = new THREE.MeshStandardMaterial({color:0xd4c4a0, roughness:0.6});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  scene.add(mesh);
+  return mesh;
+}
+
+function addTorches(pos) {
+  for(let i=-1;i<=1;i+=2) {
+    const torchGeo = new THREE.CylinderGeometry(0.03,0.05,0.4,6);
+    const torchMat = new THREE.MeshStandardMaterial({color:0x5a3a20});
+    const torch = new THREE.Mesh(torchGeo, torchMat);
+    torch.position.set(pos.x+i*1.5, pos.y+0.5, pos.z);
+    scene.add(torch);
+
+    const flameGeo = new THREE.SphereGeometry(0.08,6,6);
+    const flameMat = new THREE.MeshStandardMaterial({
+      color:0xff6600, emissive:0xff4400, emissiveIntensity:3
+    });
+    const flame = new THREE.Mesh(flameGeo, flameMat);
+    flame.position.set(pos.x+i*1.5, pos.y+0.8, pos.z);
+    scene.add(flame);
+    glowObjects.push(flame);
+
+    addGlowLight(new THREE.Vector3(pos.x+i*1.5, pos.y+0.9, pos.z), 0xff6600, 1.5, 5);
+  }
+}
+
+function createLever(x, y, z, color=0xc9a84c, id) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+
+  const baseGeo = new THREE.CylinderGeometry(0.15,0.2,0.3,8);
+  const baseMat = new THREE.MeshStandardMaterial({color:0x5a4a30, roughness:0.7});
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.position.y = 0.15;
+  base.castShadow = true;
+  group.add(base);
+
+  const poleGeo = new THREE.CylinderGeometry(0.04,0.04,0.7,6);
+  const poleMat = new THREE.MeshStandardMaterial({color, roughness:0.3, metalness:0.7});
+  const pole = new THREE.Mesh(poleGeo, poleMat);
+  pole.position.y = 0.65;
+  pole.rotation.z = -0.5;
+  pole.castShadow = true;
+  group.add(pole);
+
+  const handleGeo = new THREE.SphereGeometry(0.1,8,8);
+  const handleMat = createGlowMaterial(color, 0.8);
+  const handle = new THREE.Mesh(handleGeo, handleMat);
+  handle.position.set(-0.3, 1.0, 0);
+  handle.castShadow = true;
+  group.add(handle);
+  glowObjects.push(handle);
+
+  scene.add(group);
+  interactiveObjects.push({ type:'lever', mesh:group, handle, pole, pulled:false, id, solved:false });
+  return group;
+}
+
+function createRotatingPillar(x, z, symbols, pillarIndex) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+
+  const pillarGeo = new THREE.CylinderGeometry(0.3,0.35,2.5,8);
+  const pillarMat = createMayanMaterial(0x3a2a1a);
+  const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+  pillar.position.y = 1.25;
+  pillar.castShadow = true;
+  group.add(pillar);
+
+  const symbolColors = [0xff4444, 0x44ff44, 0x4444ff, 0xffaa00, 0xaa44ff];
+  for(let i=0; i<symbols.length; i++) {
+    const symGeo = new THREE.PlaneGeometry(0.3,0.3);
+    const symMat = new THREE.MeshStandardMaterial({
+      color:symbolColors[i%symbolColors.length],
+      emissive:symbolColors[i%symbolColors.length],
+      emissiveIntensity:0.5, side:THREE.DoubleSide
+    });
+    const sym = new THREE.Mesh(symGeo, symMat);
+    const angle = (i/symbols.length)*Math.PI*2;
+    sym.position.set(Math.cos(angle)*0.32, 1.8, Math.sin(angle)*0.32);
+    sym.lookAt(x+Math.cos(angle)*2, 1.8, z+Math.sin(angle)*2);
+    group.add(sym);
+  }
+
+  const topGeo = new THREE.ConeGeometry(0.35, 0.3, 8);
+  const topMat = createGlowMaterial(0xc9a84c, 0.5);
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.position.y = 2.65;
+  group.add(top);
+  glowObjects.push(top);
+
+  scene.add(group);
+  interactiveObjects.push({
+    type:'pillar', mesh:group, pillar,
+    currentAngle:0, targetAngle:0,
+    symbols, pillarIndex, solved:false
+  });
+  return group;
+}
+
+function createMirror(x, y, z, rotY, id) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+  group.rotation.y = rotY;
+
+  const frameGeo = new THREE.BoxGeometry(0.6,0.8,0.05);
+  const frameMat = new THREE.MeshStandardMaterial({color:0xc9a84c, roughness:0.3, metalness:0.8});
+  const frame = new THREE.Mesh(frameGeo, frameMat);
+  frame.castShadow = true;
+  group.add(frame);
+
+  const mirrorGeo = new THREE.PlaneGeometry(0.5,0.7);
+  const mirrorMat = new THREE.MeshStandardMaterial({
+    color:0xffffff, metalness:1.0, roughness:0.0,
+    envMapIntensity:2.0
+  });
+  const mirrorMesh = new THREE.Mesh(mirrorGeo, mirrorMat);
+  mirrorMesh.position.z = 0.03;
+  group.add(mirrorMesh);
+
+  const standGeo = new THREE.CylinderGeometry(0.05,0.08,0.6,6);
+  const standMat = new THREE.MeshStandardMaterial({color:0x5a4a30, roughness:0.7});
+  const stand = new THREE.Mesh(standGeo, standMat);
+  stand.position.y = -0.7;
+  group.add(stand);
+
+  addGlowLight(new THREE.Vector3(x,y,z+0.5), 0x4488ff, 0.5, 3);
+
+  scene.add(group);
+  interactiveObjects.push({ type:'mirror', mesh:group, id, solved:false, rotY });
+  return group;
+}
+
+function createPrism(x, y, z, id) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+
+  const prismGeo = new THREE.ConeGeometry(0.25, 0.6, 3);
+  const prismMat = new THREE.MeshStandardMaterial({
+    color:0xffffff, transparent:true, opacity:0.5,
+    roughness:0.0, metalness:0.3
+  });
+  const prism = new THREE.Mesh(prismGeo, prismMat);
+  prism.rotation.x = Math.PI/2;
+  group.add(prism);
+
+  addGlowLight(new THREE.Vector3(x,y,z), 0xffffff, 1, 4);
+  glowObjects.push(prism);
+
+  scene.add(group);
+  interactiveObjects.push({ type:'prism', mesh:group, id, solved:false });
+  return group;
+}
+
+function createLaserEmitter(x,y,z, direction, color=0xff0000) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+
+  const bodyGeo = new THREE.BoxGeometry(0.3,0.3,0.4);
+  const bodyMat = new THREE.MeshStandardMaterial({color:0x444444, metalness:0.8, roughness:0.3});
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+
+  const lensGeo = new THREE.SphereGeometry(0.08,8,8);
+  const lensMat = new THREE.MeshStandardMaterial({
+    color, emissive:color, emissiveIntensity:3
+  });
+  const lens = new THREE.Mesh(lensGeo, lensMat);
+  lens.position.z = 0.25;
+  group.add(lens);
+  glowObjects.push(lens);
+
+  addGlowLight(new THREE.Vector3(x,y,z), color, 1, 3);
+
+  scene.add(group);
+  return { position:new THREE.Vector3(x,y,z), direction:direction.clone().normalize(), color };
+}
+
+function createLaserReceiver(x,y,z, color=0xff0000) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+
+  const bodyGeo = new THREE.BoxGeometry(0.4,0.4,0.2);
+  const bodyMat = new THREE.MeshStandardMaterial({color:0x333333, metalness:0.8, roughness:0.3});
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+
+  const ringGeo = new THREE.TorusGeometry(0.15, 0.02, 8, 16);
+  const ringMat = new THREE.MeshStandardMaterial({color, emissive:color, emissiveIntensity:0.5});
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.z = 0.11;
+  group.add(ring);
+
+  scene.add(group);
+  interactiveObjects.push({ type:'receiver', mesh:group, color, activated:false });
+  return group;
+}
+
+function createPressurePad(x, z, id) {
+  const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 16);
+  const mat = new THREE.MeshStandardMaterial({
+    color:0xc9a84c, emissive:0xc9a84c, emissiveIntensity:0.3,
+    roughness:0.5, metalness:0.6
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0.025, z);
+  scene.add(mesh);
+  interactiveObjects.push({ type:'pad', mesh, id, activated:false });
+  return mesh;
+}
+
+function createDoor(x, y, z, id, rotY=0) {
+  const group = new THREE.Group();
+  group.position.set(x,y,z);
+  group.rotation.y = rotY;
+
+  const doorGeo = new THREE.BoxGeometry(1.8, 2.5, 0.2);
+  const doorMat = new THREE.MeshStandardMaterial({
+    color:0x3a2a1a, roughness:0.8, metalness:0.2
+  });
+  const door = new THREE.Mesh(doorGeo, doorMat);
+  door.position.y = 1.25;
+  door.castShadow = true;
+  group.add(door);
+
+  const glyphGeo = new THREE.PlaneGeometry(0.5,0.5);
+  const glyphMat = new THREE.MeshStandardMaterial({
+    color:0xc9a84c, emissive:0xc9a84c, emissiveIntensity:0.5,
+    transparent:true, opacity:0.6
+  });
+  const glyph = new THREE.Mesh(glyphGeo, glyphMat);
+  glyph.position.set(0, 1.5, 0.12);
+  group.add(glyph);
+  glowObjects.push(glyph);
+
+  addGlowLight(new THREE.Vector3(x,y+2,z), 0xc9a84c, 0.8, 4);
+
+  scene.add(group);
+  interactiveObjects.push({ type:'door', mesh:group, door, glyph, open:false, id });
+  return group;
+}
+
+function createSign(x,y,z, text, color=0xc9a84c) {
+  const canvas2 = document.createElement('canvas');
+  canvas2.width = 512;
+  canvas2.height = 128;
+  const ctx = canvas2.getContext('2d');
+  ctx.fillStyle = 'rgba(10,5,8,0.8)';
+  ctx.fillRect(0,0,512,128);
+  ctx.strokeStyle = `rgb(${(color>>16)&255},${(color>>8)&255},${color&255})`;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(4,4,504,120);
+  ctx.fillStyle = '#e8d48b';
+  ctx.font = '20px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 256, 75);
+
+  const tex = new THREE.CanvasTexture(canvas2);
+  const mat = new THREE.MeshBasicMaterial({ map:tex, transparent:true, side:THREE.DoubleSide });
+  const geo = new THREE.PlaneGeometry(1.2, 0.3);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  scene.add(mesh);
+  return mesh;
+}
+
+function createCrystal(x,y,z,color) {
+  const geo = new THREE.OctahedronGeometry(0.2, 0);
+  const mat = createGlowMaterial(color, 2);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x,y,z);
+  mesh.rotation.y = Math.PI/4;
+  scene.add(mesh);
+  glowObjects.push(mesh);
+  addGlowLight(new THREE.Vector3(x,y,z), color, 1.5, 5);
+  return mesh;
+}
+
+function createLaserBeam(start, end, color) {
+  const dir = new THREE.Vector3().subVectors(end, start);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(0.02, 0.02, len, 4);
+  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.8});
+  const beam = new THREE.Mesh(geo, mat);
+  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  beam.position.copy(mid);
+  beam.lookAt(end);
+  beam.rotateX(Math.PI/2);
+  scene.add(beam);
+  return beam;
+}
+
+let laserBeams = [];
+let doors = [];
+
+function clearLevel() {
+  while(scene.children.length > 0) {
+    scene.remove(scene.children[0]);
+  }
+  puzzleObjects = [];
+  interactiveObjects = [];
+  glowObjects = [];
+  laserBeams = [];
+  doors = [];
+
+  const ambLight = new THREE.AmbientLight(0x1a0f0a, 0.3);
+  scene.add(ambLight);
+}
+
+function buildLevel(levelIndex) {
+  clearLevel();
+  interactiveObjects = [];
+
+  const s = SCORE_PER_LEVEL[levelIndex] || 100;
+
+  document.getElementById('levelDisplay').textContent = `Уровень ${levelIndex+1} / ${LEVEL_COUNT}`;
+  showGuide(`level${levelIndex+1}`);
+
+  switch(levelIndex) {
+    case 0: buildLevel1(); break;
+    case 1: buildLevel2(); break;
+    case 2: buildLevel3(); break;
+    case 3: buildLevel4(); break;
+    case 4: buildLevel5(); break;
+    case 5: buildLevel6(); break;
+    case 6: buildLevel7(); break;
+  }
+}
+
+function buildLevel1() {
+  const roomW=12, roomD=20, roomH=4;
+  createFloor(0, 0, roomW, roomD);
+
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+  createFloor(0, 0, roomW, roomD);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-5.5, 1, -6));
+  addTorches(new THREE.Vector3(5.5, 1, -6));
+  addTorches(new THREE.Vector3(-5.5, 1, 6));
+  addTorches(new THREE.Vector3(5.5, 1, 6));
+
+  createDecorGlyph(-5.8, 2.5, -3);
+  createDecorGlyph(-5.8, 2.5, 0);
+  createDecorGlyph(-5.8, 2.5, 3);
+  createDecorGlyph(5.8, 2.5, -3);
+  createDecorGlyph(5.8, 2.5, 3);
+
+  createSign(0, 3, -9.5, "Храм Света — Три Зеркала");
+  createSign(0, 1.5, -8, "Сквозь призму — к истине");
+
+  const emitter = createLaserEmitter(0, 1.5, -8, new THREE.Vector3(0,0,1), 0xff0044);
+  puzzleObjects.push(emitter);
+
+  createMirror(-4, 1.5, -2, 0, 'm1');
+  createMirror(4, 1.5, 0, Math.PI, 'm2');
+  createMirror(-4, 1.5, 4, 0, 'm3');
+
+  createPrism(0, 1.5, 2, 'p1');
+
+  createCrystal(0, 1.5, 7, 0xff0044);
+  createCrystal(-2, 1.5, 7, 0x00ff44);
+  createCrystal(2, 1.5, 7, 0x4444ff);
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door1');
+  doors.push(door);
+
+  createLaserReceiver(0, 1.5, 8, 0xff0044);
+
+  addGlowLight(new THREE.Vector3(0, 3, 0), 0xc9a84c, 0.5, 12);
+  addGlowLight(new THREE.Vector3(0, 1.5, 5), 0x4488ff, 0.3, 6);
+
+  playerPos.set(0, 1.7, -8);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel2() {
+  const roomW=16, roomD=14, roomH=4;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-7.5, 1, -5));
+  addTorches(new THREE.Vector3(7.5, 1, -5));
+  addTorches(new THREE.Vector3(-7.5, 1, 5));
+  addTorches(new THREE.Vector3(7.5, 1, 5));
+
+  createSign(0, 3, -6.5, "Зал Трёх Рычагов");
+  createSign(0, 1.5, -5, "Два верных. Один — ловушка.");
+
+  createLever(-3, 0, -2, 0xff4444, 'l1');
+  createLever(0, 0, -2, 0x44ff44, 'l2');
+  createLever(3, 0, -2, 0x4444ff, 'l3');
+
+  createDecorSkull(-3, 2.2, -2);
+  createDecorSkull(0, 2.2, -2);
+  createDecorSkull(3, 2.2, -2);
+
+  createCrystal(-2, 1, 3, 0x44ff44);
+  createCrystal(2, 1, 3, 0xff4444);
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door2');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 3, 0), 0xc9a84c, 0.4, 10);
+  addGlowLight(new THREE.Vector3(0, 1.5, -3), 0x4a9, 0.5, 6);
+
+  playerPos.set(0, 1.7, -5);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel3() {
+  const roomW=14, roomD=14, roomH=4.5;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-6.5, 1, -4));
+  addTorches(new THREE.Vector3(6.5, 1, -4));
+  addTorches(new THREE.Vector3(-6.5, 1, 4));
+  addTorches(new THREE.Vector3(6.5, 1, 4));
+
+  createSign(0, 3, -6.5, "Храм Вращающихся Символов");
+  createSign(0, 1.5, -5, "Три столба — три судьбы. Совпади — и пройдёшь.");
+
+  const symbols = ['sun','moon','star','snake','eye'];
+  createRotatingPillar(-3, 0, symbols, 0);
+  createRotatingPillar(0, 0, symbols, 1);
+  createRotatingPillar(3, 0, symbols, 2);
+
+  createCrystal(-2, 3.5, 2, 0xffaa00);
+  createCrystal(2, 3.5, 2, 0xaa44ff);
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door3');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 3.5, 0), 0xffaa00, 0.5, 10);
+
+  playerPos.set(0, 1.7, -5);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel4() {
+  const roomW=18, roomD=16, roomH=4;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-8.5, 1, -6));
+  addTorches(new THREE.Vector3(8.5, 1, -6));
+  addTorches(new THREE.Vector3(-8.5, 1, 6));
+  addTorches(new THREE.Vector3(8.5, 1, 6));
+
+  createSign(0, 3, -7.5, "Призменный Зал");
+  createSign(0, 1.5, -6, "Раздели луч. Соедини цвета.");
+
+  createLaserEmitter(-6, 1.5, -5, new THREE.Vector3(1,0,0.5).normalize(), 0xffffff);
+  createPrism(-2, 1.5, -3, 'p4');
+
+  createMirror(2, 1.5, 0, Math.PI/2, 'm4');
+  createMirror(-5, 1.5, 3, -Math.PI/4, 'm5');
+
+  createLaserReceiver(-6, 1.5, 5, 0xff0000);
+  createLaserReceiver(0, 1.5, 5, 0x00ff00);
+  createLaserReceiver(6, 1.5, 5, 0x0000ff);
+
+  createCrystal(-6, 1.5, 5, 0xff0000);
+  createCrystal(0, 1.5, 5, 0x00ff00);
+  createCrystal(6, 1.5, 5, 0x0000ff);
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door4');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 3, 0), 0xffffff, 0.4, 14);
+
+  playerPos.set(-6, 1.7, -6);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel5() {
+  const roomW=14, roomD=16, roomH=4;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-6.5, 1, -5));
+  addTorches(new THREE.Vector3(6.5, 1, -5));
+  addTorches(new THREE.Vector3(-6.5, 1, 5));
+  addTorches(new THREE.Vector3(6.5, 1, 5));
+
+  createSign(0, 3, -7.5, "Зал Последовательностей");
+  createSign(0, 1.5, -6, "Запомни знаки. Нажми в порядке.");
+
+  const padColors = [0xff4444, 0x44ff44, 0x4444ff, 0xffaa00];
+  for(let i=0; i<4; i++) {
+    const px = -4.5 + i*3;
+    createPressurePad(px, -2, `pad${i}`);
+    createCrystal(px, 0.5, -2, padColors[i]);
+  }
+
+  createSign(0, 1.5, -3.5, "☀ Солнце  ☽ Луна  ☆ Звезда  ⚡ Змей");
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door5');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 3, 0), 0xc9a84c, 0.4, 10);
+
+  playerPos.set(0, 1.7, -6);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel6() {
+  const roomW=20, roomD=20, roomH=4;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  for(let wx=-6; wx<=6; wx+=6) {
+    createTunnelWall(wx, 1.5, -3, 0.3, 3, 4);
+    createTunnelWall(wx, 1.5, 4, 0.3, 3, 4);
+  }
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-9.5, 1, -8));
+  addTorches(new THREE.Vector3(9.5, 1, -8));
+  addTorches(new THREE.Vector3(-9.5, 1, 8));
+  addTorches(new THREE.Vector3(9.5, 1, 8));
+
+  createSign(0, 3, -9.5, "Зеркальный Лабиринт");
+  createSign(0, 1.5, -8, "Одно зеркало ведёт к цели.");
+
+  createMirror(-6, 1.5, -2, Math.PI/4, 'm6');
+  createMirror(-3, 1.5, 2, -Math.PI/4, 'm7');
+  createMirror(0, 1.5, -1, 0, 'm8');
+  createMirror(3, 1.5, 3, Math.PI/2, 'm9');
+  createMirror(6, 1.5, 0, -Math.PI/3, 'm10');
+
+  createLaserEmitter(-8, 1.5, -8, new THREE.Vector3(1,0,1).normalize(), 0xff0044);
+  createLaserReceiver(8, 1.5, 8, 0xff0044);
+
+  createCrystal(8, 1.5, 8, 0xff0044);
+
+  const door = createDoor(8, 0, 9.5, 'door6');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 3, 0), 0xc9a84c, 0.3, 16);
+
+  playerPos.set(-8, 1.7, -8);
+  camera.position.copy(playerPos);
+}
+
+function buildLevel7() {
+  const roomW=22, roomD=24, roomH=5;
+  createFloor(0, 0, roomW, roomD);
+  createTunnelWall(-roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(roomW/2, roomH/2, 0, 0.5, roomH, roomD);
+  createTunnelWall(0, roomH/2, -roomD/2, roomW, roomH, 0.5);
+  createTunnelWall(0, roomH/2, roomD/2, roomW, roomH, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(roomW, roomD);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = roomH;
+  scene.add(ceil);
+
+  addTorches(new THREE.Vector3(-10.5, 1, -10));
+  addTorches(new THREE.Vector3(10.5, 1, -10));
+  addTorches(new THREE.Vector3(-10.5, 1, 10));
+  addTorches(new THREE.Vector3(10.5, 1, 10));
+
+  for(let i=0;i<5;i++) {
+    addTorches(new THREE.Vector3(-10.5+i*5.25, 1, 0));
+  }
+
+  createSign(0, 4, -11.5, "Финальное Испытание Великого Кукулькана");
+  createSign(0, 1.5, -10, "Все навыки. Вся мудрость. Один путь.");
+
+  createLaserEmitter(-8, 1.5, -8, new THREE.Vector3(1,0,0).normalize(), 0xff0044);
+  createPrism(-3, 1.5, -6, 'p7');
+  createMirror(2, 1.5, -4, Math.PI/4, 'm11');
+  createLever(-5, 0, 0, 0xc9a84c, 'lf1');
+  createLever(5, 0, 0, 0xff4444, 'lf2');
+  createRotatingPillar(-2, 3, ['sun','moon','star'], 0);
+  createPressurePad(3, 6, 'padf1');
+
+  createLaserReceiver(8, 1.5, 8, 0xff0044);
+  createCrystal(8, 2.5, 8, 0xff0044);
+
+  for(let i=0;i<7;i++) {
+    const angle = (i/7)*Math.PI*2;
+    createCrystal(Math.cos(angle)*6, 1.5, Math.sin(angle)*6,
+      [0xff0000,0xff4400,0xffaa00,0xffff00,0x44ff00,0x00ffaa,0x4444ff][i]);
+  }
+
+  const door = createDoor(0, 0, roomD/2 - 0.5, 'door7');
+  doors.push(door);
+
+  addGlowLight(new THREE.Vector3(0, 4, 0), 0xc9a84c, 0.6, 18);
+  addGlowLight(new THREE.Vector3(0, 2, 0), 0xffaa00, 0.4, 10);
+
+  const wisdomIdx = Math.floor(Math.random()*WISDOMS.length);
+  createSign(0, 2, 8, WISDOMS[wisdomIdx].ru, 0xffaa00);
+
+  playerPos.set(-8, 1.7, -10);
+  camera.position.copy(playerPos);
+}
+
+function showHint() {
+  hintUsed = true;
+  const key = `hint${currentLevel+1}`;
+  const msg = GUIDE_MESSAGES[key] || "Осмотри внимательно все объекты в зале.";
+  document.getElementById('guideText').innerHTML = `<span class="guide-avatar">💡</span> ${msg}`;
+}
+
+function showGuide(key) {
+  const msgs = GUIDE_MESSAGES[key];
+  if(!msgs) return;
+  guideMessageQueue = [...msgs];
+  guideIndex = 0;
+  showNextGuideMessage();
+}
+
+function showNextGuideMessage() {
+  if(guideIndex >= guideMessageQueue.length) return;
+  document.getElementById('guideText').innerHTML =
+    `<span class="guide-avatar">🔮</span> ${guideMessageQueue[guideIndex]}`;
+  guideIndex++;
+  if(guideIndex < guideMessageQueue.length) {
+    setTimeout(showNextGuideMessage, 8000);
+  }
+}
+
+function showWisdom() {
+  const w = WISDOMS[Math.floor(Math.random()*WISDOMS.length)];
+  document.getElementById('wisdomText').innerHTML =
+    `"${w.ru}"<br><br><em>${w.la}</em><br><em>${w.en}</em>`;
+  document.getElementById('wisdomLang').textContent = "Русский · Latin · English";
+  document.getElementById('wisdomPanel').style.display = 'block';
+}
+
+function closeWisdom() {
+  document.getElementById('wisdomPanel').style.display = 'none';
+}
+
+function exitGame() {
+  localStorage.setItem('maya_tunnel_save', JSON.stringify({
+    level: currentLevel, score: score
+  }));
+  showWisdom();
+}
+
+function addScore(pts) {
+  score += pts;
+  document.getElementById('scoreDisplay').textContent = score;
+}
+
+function openDoor(doorObj) {
+  if(doorObj.open) return;
+  doorObj.open = true;
+  doorObj.glyph.material.emissiveIntensity = 2;
+  doorObj.door.material.color.setHex(0xc9a84c);
+  doorObj.door.material.emissive = new THREE.Color(0xc9a84c);
+  doorObj.door.material.emissiveIntensity = 0.3;
+
+  const startY = doorObj.door.position.y;
+  const animDoor = () => {
+    if(doorObj.door.position.y > -2) {
+      doorObj.door.position.y -= 0.05;
+      requestAnimationFrame(animDoor);
+    }
+  };
+  animDoor();
+  addGlowLight(doorObj.mesh.position.clone(), 0x00ff88, 2, 6);
+  showWisdom();
+}
+
+function checkPuzzleSolved() {
+  let solved = false;
+
+  switch(currentLevel) {
+    case 0: {
+      const receivers = interactiveObjects.filter(o=>o.type==='receiver');
+      const activated = receivers.filter(o=>o.activated);
+      if(activated.length >= 1) solved = true;
+      break;
+    }
+    case 1: {
+      const levers = interactiveObjects.filter(o=>o.type==='lever');
+      const pulled = levers.filter(o=>o.pulled);
+      if(pulled.length === 2) {
+        const ids = pulled.map(l=>l.id);
+        if(ids.includes('l2') && ids.includes('l3')) solved = true;
+        else if(ids.includes('l1') && ids.includes('l3')) solved = true;
+      }
+      break;
+    }
+    case 2: {
+      const pillars = interactiveObjects.filter(o=>o.type==='pillar');
+      if(pillars.every(p=>p.solved)) solved = true;
+      break;
+    }
+    case 3: {
+      const receivers = interactiveObjects.filter(o=>o.type==='receiver');
+      if(receivers.every(r=>r.activated)) solved = true;
+      break;
+    }
+    case 4: {
+      const pads = interactiveObjects.filter(o=>o.type==='pad');
+      const activated = pads.filter(o=>o.activated);
+      if(activated.length >= 3) solved = true;
+      break;
+    }
+    case 5: {
+      const receivers = interactiveObjects.filter(o=>o.type==='receiver');
+      if(receivers.some(r=>r.activated)) solved = true;
+      break;
+    }
+    case 6: {
+      const receivers = interactiveObjects.filter(o=>o.type==='receiver');
+      const levers = interactiveObjects.filter(o=>o.type==='lever');
+      const pillars = interactiveObjects.filter(o=>o.type==='pillar');
+      const pads = interactiveObjects.filter(o=>o.type==='pad');
+      let r1 = receivers.some(r=>r.activated);
+      let l1 = levers.filter(o=>o.pulled).length >= 1;
+      let p1 = pillars.some(p=>p.solved);
+      let d1 = pads.some(p=>p.activated);
+      if(r1 && l1 && p1 && d1) solved = true;
+      break;
+    }
+  }
+
+  if(solved) {
+    const doorObj = doors.find(d=>!d.open);
+    if(doorObj) {
+      openDoor(doorObj);
+      const pts = SCORE_PER_LEVEL[currentLevel] || 100;
+      const bonus = hintUsed ? 0 : Math.floor(pts*0.3);
+      addScore(pts + bonus);
+
+      document.getElementById('guideText').innerHTML =
+        `<span class="guide-avatar">🔮</span> Превосходно! Дверь открыта. +${pts} очков${bonus>0?`, +${bonus} за без подсказки`:''}!`;
+
+      setTimeout(()=>{
+        currentLevel++;
+        if(currentLevel >= LEVEL_COUNT) {
+          document.getElementById('finalScore').textContent = score;
+          document.getElementById('completion-screen').style.display = 'flex';
+        } else {
+          hintUsed = false;
+          buildLevel(currentLevel);
+        }
+      }, 3000);
+    }
+  }
+}
+
+function checkPlayerAtReceiver() {
+  const receivers = interactiveObjects.filter(o=>o.type==='receiver' && !o.activated);
+  for(const r of receivers) {
+    const rp = r.mesh.position;
+    const dist = playerPos.distanceTo(new THREE.Vector3(rp.x, playerPos.y, rp.z));
+    if(dist < 1.2) {
+      r.activated = true;
+      r.mesh.children[1].material.emissiveIntensity = 3;
+      addGlowLight(rp.clone(), 0x00ff88, 2, 5);
+      checkPuzzleSolved();
+    }
+  }
+
+  const pads = interactiveObjects.filter(o=>o.type==='pad' && !o.activated);
+  for(const p of pads) {
+    const pp = p.mesh.position;
+    const dist = playerPos.distanceTo(new THREE.Vector3(pp.x, playerPos.y, pp.z));
+    if(dist < 0.6) {
+      p.activated = true;
+      p.mesh.material.emissiveIntensity = 2;
+      p.mesh.material.emissive = new THREE.Color(0x00ff88);
+      checkPuzzleSolved();
+    }
+  }
+}
+
+function interactWithClosest() {
+  let closest = null;
+  let minDist = 3;
+
+  for(const obj of interactiveObjects) {
+    let pos;
+    if(obj.type === 'door') continue;
+    pos = obj.mesh.position;
+    const dist = playerPos.distanceTo(new THREE.Vector3(pos.x, playerPos.y, pos.z));
+    if(dist < minDist) {
+      minDist = dist;
+      closest = obj;
+    }
+  }
+
+  if(!closest) return;
+
+  switch(closest.type) {
+    case 'lever':
+      closest.pulled = !closest.pulled;
+      const targetZ = closest.pulled ? 0.5 : -0.5;
+      closest.pole.rotation.z = closest.pulled ? 0.5 : -0.5;
+      closest.handle.position.x = closest.pulled ? 0.3 : -0.3;
+      closest.handle.material.emissive.setHex(closest.pulled ? 0x00ff88 : 0xc9a84c);
+      checkPuzzleSolved();
+      break;
+
+    case 'pillar':
+      closest.targetAngle += Math.PI/2;
+      closest.solved = false;
+      setTimeout(()=>{
+        closest.currentAngle = closest.targetAngle;
+        closest.pillar.rotation.y = closest.currentAngle;
+
+        const allPillars = interactiveObjects.filter(o=>o.type==='pillar');
+        if(allPillars.every(p=>Math.abs(p.currentAngle%(Math.PI*2)) < 0.1 || Math.abs(p.currentAngle%(Math.PI*2)-Math.PI*2) < 0.1)) {
+          allPillars.forEach(p=>p.solved = true);
+          checkPuzzleSolved();
+        }
+      }, 400);
+      break;
+
+    case 'mirror':
+      closest.rotY += Math.PI/4;
+      closest.mesh.rotation.y = closest.rotY;
+      break;
+
+    case 'prism':
+      closest.activated = true;
+      closest.solved = true;
+      closest.mesh.children[0].material.emissive = new THREE.Color(0xffffff);
+      closest.mesh.children[0].material.emissiveIntensity = 2;
+      addGlowLight(closest.mesh.position.clone(), 0xffffff, 2, 6);
+
+      const receivers = interactiveObjects.filter(o => o.type === 'receiver');
+      receivers.forEach(r => {
+        if(!r.activated) {
+          r.activated = true;
+          r.mesh.children[1].material.emissiveIntensity = 3;
+          addGlowLight(r.mesh.position.clone(), 0x00ff88, 2, 5);
+        }
+      });
+
+      checkPuzzleSolved();
+      break;
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  const dir = new THREE.Vector3();
+  if(moveState.forward) dir.z -= 1;
+  if(moveState.backward) dir.z += 1;
+  if(moveState.left) dir.x -= 1;
+  if(moveState.right) dir.x += 1;
+  if(dir.length() > 0) dir.normalize();
+
+  const speed = moveState.sprint ? 8 : 4;
+  const euler = new THREE.Euler(0, yaw, 0, 'YXZ');
+  dir.applyEuler(euler);
+
+  velocity.x += (dir.x * speed - velocity.x) * 8 * dt;
+  velocity.z += (dir.z * speed - velocity.z) * 8 * dt;
+
+  playerPos.x += velocity.x * dt;
+  playerPos.z += velocity.z * dt;
+
+  const roomBounds = { minX:-10, maxX:10, minZ:-12, maxZ:12 };
+  if(currentLevel === 5) { roomBounds.minX=-9.5; roomBounds.maxX=9.5; roomBounds.minZ=-9.5; roomBounds.maxZ=9.5; }
+  if(currentLevel === 6) { roomBounds.minX=-10.5; roomBounds.maxX=10.5; roomBounds.minZ=-11.5; roomBounds.maxZ=11.5; }
+
+  playerPos.x = Math.max(roomBounds.minX, Math.min(roomBounds.maxX, playerPos.x));
+  playerPos.z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, playerPos.z));
+  playerPos.y = 1.7;
+
+  camera.position.copy(playerPos);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  const time = performance.now() * 0.001;
+  for(const g of glowObjects) {
+    if(g.isLight) {
+      g.intensity = g.intensity * 0.98 + (1.5 + Math.sin(time*2 + g.position.x)*0.5) * 0.02;
+    }
+    if(g.geometry && g.geometry.type === 'OctahedronGeometry') {
+      g.rotation.y += dt;
+      g.rotation.x += dt * 0.5;
+      g.position.y = 1.5 + Math.sin(time*2 + g.position.x)*0.1;
+    }
+    if(g.geometry && g.geometry.type === 'SphereGeometry') {
+      g.scale.setScalar(0.8 + Math.sin(time*5 + g.position.x)*0.2);
+    }
+  }
+
+  checkPlayerAtReceiver();
+
+  updateMinimap();
+  updateInteractionPrompt();
+
+  renderer.render(scene, camera);
+}
+
+function updateMinimap() {
+  const canvas = document.getElementById('minimapCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0508';
+  ctx.fillRect(0,0,120,120);
+
+  const scale = 5;
+  const ox = 60, oz = 60;
+
+  ctx.strokeStyle = '#c9a84c33';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(ox-10*scale, oz-12*scale, 20*scale, 24*scale);
+
+  for(const obj of interactiveObjects) {
+    const px = ox + obj.mesh.position.x * scale;
+    const py = oz + obj.mesh.position.z * scale;
+
+    if(obj.type === 'door') {
+      ctx.fillStyle = obj.open ? '#00ff88' : '#c9a84c';
+      ctx.fillRect(px-2, py-4, 4, 8);
+    } else if(obj.type === 'lever') {
+      ctx.fillStyle = obj.pulled ? '#00ff88' : '#ff4444';
+      ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2); ctx.fill();
+    } else if(obj.type === 'mirror') {
+      ctx.fillStyle = '#4488ff';
+      ctx.fillRect(px-2, py-2, 4, 4);
+    } else if(obj.type === 'prism') {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2); ctx.fill();
+    } else if(obj.type === 'receiver') {
+      ctx.fillStyle = obj.activated ? '#00ff88' : '#ff0044';
+      ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2); ctx.fill();
+    } else if(obj.type === 'pad') {
+      ctx.fillStyle = obj.activated ? '#00ff88' : '#c9a84c';
+      ctx.beginPath(); ctx.arc(px,py,2,0,Math.PI*2); ctx.fill();
+    } else if(obj.type === 'pillar') {
+      ctx.fillStyle = '#aa44ff';
+      ctx.fillRect(px-2, py-4, 4, 8);
+    }
+  }
+
+  const ppx = ox + playerPos.x * scale;
+  const ppz = oz + playerPos.z * scale;
+  ctx.fillStyle = '#ffe9a0';
+  ctx.beginPath();
+  ctx.moveTo(ppx, ppz-4);
+  ctx.lineTo(ppx-3, ppz+3);
+  ctx.lineTo(ppx+3, ppz+3);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function updateInteractionPrompt() {
+  const prompt = document.getElementById('interaction-prompt');
+  let closest = null;
+  let minDist = 3;
+
+  for(const obj of interactiveObjects) {
+    if(obj.type === 'door' || obj.type === 'receiver' || obj.type === 'pad') continue;
+    const pos = obj.mesh.position;
+    const dist = playerPos.distanceTo(new THREE.Vector3(pos.x, playerPos.y, pos.z));
+    if(dist < minDist) {
+      minDist = dist;
+      closest = obj;
+    }
+  }
+
+  if(closest) {
+    prompt.style.display = 'block';
+    if(closest.type === 'lever') {
+      prompt.textContent = `Нажмите E — ${closest.pulled ? 'отпустить' : 'потянуть'} рычаг`;
+    } else if(closest.type === 'pillar') {
+      prompt.textContent = 'Нажмите E — повернуть столбик';
+    } else if(closest.type === 'mirror') {
+      prompt.textContent = 'Нажмите E — повернуть зеркало';
+    } else if(closest.type === 'prism') {
+      prompt.textContent = 'Нажмите E — активировать призму';
+    }
+  } else {
+    prompt.style.display = 'none';
+  }
+}
+
+function setupInput() {
+  document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if(e.code === 'KeyW') moveState.forward = true;
+    if(e.code === 'KeyS') moveState.backward = true;
+    if(e.code === 'KeyA') moveState.left = true;
+    if(e.code === 'KeyD') moveState.right = true;
+    if(e.code === 'ShiftLeft') moveState.sprint = true;
+    if(e.code === 'KeyE') interactWithClosest();
+    if(e.code === 'KeyH') showHint();
+    if(e.code === 'KeyQ') exitGame();
+    if(e.code === 'Escape') {
+      document.exitPointerLock();
+    }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+    if(e.code === 'KeyW') moveState.forward = false;
+    if(e.code === 'KeyS') moveState.backward = false;
+    if(e.code === 'KeyA') moveState.left = false;
+    if(e.code === 'KeyD') moveState.right = false;
+    if(e.code === 'ShiftLeft') moveState.sprint = false;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if(!isLocked) return;
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch));
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    isLocked = !!document.pointerLockElement;
+  });
+
+  document.getElementById('gameCanvas').addEventListener('click', () => {
+    if(!isLocked) {
+      document.getElementById('gameCanvas').requestPointerLock();
+    }
+  });
+
+  document.getElementById('startBtn').addEventListener('click', () => {
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('gameCanvas').requestPointerLock();
+
+    const save = localStorage.getItem('maya_tunnel_save');
+    if(save) {
+      const data = JSON.parse(save);
+      currentLevel = data.level || 0;
+      score = data.score || 0;
+      document.getElementById('scoreDisplay').textContent = score;
+      buildLevel(currentLevel);
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
+function animateIntro() {
+  const fill = document.getElementById('loading-fill');
+  let progress = 0;
+  const interval = setInterval(()=>{
+    progress += 2;
+    fill.style.width = progress + '%';
+    if(progress >= 100) {
+      clearInterval(interval);
+      document.getElementById('startBtn').style.display = 'block';
+    }
+  }, 30);
+}
+
+setupInput();
+animateIntro();
+init();
+
+</script>
+</body>
+</html>
