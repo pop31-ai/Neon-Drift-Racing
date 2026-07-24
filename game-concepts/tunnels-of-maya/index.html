@@ -305,6 +305,16 @@ let mouseX=0, mouseY=0;
 const LEVEL_COUNT = 7;
 const SCORE_PER_LEVEL = [100, 150, 200, 250, 300, 350, 500];
 
+const LEVEL_THEMES = [
+  { name:"Храм Света", fog:0x0a0812, amb:0x1a1030, accent:0x4488ff, wall:0x1a1828, torch:0x4488ff },
+  { name:"Зал Рычагов", fog:0x0a0f08, amb:0x102010, accent:0x44ff44, wall:0x1a2818, torch:0x44ff44 },
+  { name:"Храм Символов", fog:0x100a08, amb:0x201510, accent:0xffaa00, wall:0x28201a, torch:0xffaa00 },
+  { name:"Призменный Зал", fog:0x080810, amb:0x101020, accent:0xcc44ff, wall:0x1a1a28, torch:0xcc44ff },
+  { name:"Зал Последовательностей", fog:0x100a0a, amb:0x201010, accent:0xff4444, wall:0x281a1a, torch:0xff4444 },
+  { name:"Зеркальный Лабиринт", fog:0x0a0a12, amb:0x101028, accent:0x44cccc, wall:0x1a1a28, torch:0x44cccc },
+  { name:"Финальное Испытание", fog:0x120a08, amb:0x281a10, accent:0xffd700, wall:0x282018, torch:0xffd700 },
+];
+
 let audioCtx = null;
 function getAudioCtx() {
   if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1028,7 +1038,16 @@ function buildLevel(levelIndex) {
     case 6: buildLevel7(); break;
   }
 
+  const theme = LEVEL_THEMES[levelIndex];
+  scene.fog = new THREE.FogExp2(theme.fog, 0.04);
+  const amb = scene.children.find(c => c.isAmbientLight);
+  if(amb) { amb.color.setHex(theme.amb); amb.intensity = 0.3; }
+  scene.background = new THREE.Color(theme.fog);
+
   dustParticles = createDustParticles(80);
+  if(dustParticles) {
+    dustParticles.material.color.setHex(theme.accent);
+  }
   highlightRings = [];
   for(const obj of interactiveObjects) {
     if(obj.type === 'lever' || obj.type === 'pillar' || obj.type === 'mirror' || obj.type === 'prism') {
