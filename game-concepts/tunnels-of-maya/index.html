@@ -180,6 +180,18 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 }
 #pause-menu button:hover { background:rgba(201,168,76,0.25); }
 #pause-menu .pause-stats { margin-top:20px; font-size:12px; color:#7a6a4a; text-align:center; line-height:1.8; }
+
+#combo-display {
+  position:absolute; top:80px; right:15px;
+  padding:6px 14px; border-radius:8px;
+  background:rgba(10,5,8,0.85); border:1px solid #c9a84c;
+  color:#ffe9a0; font-size:13px; text-align:center;
+  box-shadow:0 0 10px rgba(201,168,76,0.2);
+  transition: all 0.3s;
+}
+#combo-display .combo-x { font-size:22px; font-weight:bold; }
+#combo-display.fast { border-color:#22c55e; color:#4ade80; box-shadow:0 0 15px rgba(34,197,94,0.4); }
+#combo-display.super { border-color:#ff4444; color:#ff6666; box-shadow:0 0 15px rgba(255,68,68,0.4); }
 </style>
 </head>
 <body>
@@ -210,6 +222,11 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
     <h3>Очки</h3>
     <div class="score-val" id="scoreDisplay">0</div>
     <div class="level-info" id="levelDisplay">Уровень 1 / 7</div>
+  </div>
+
+  <div id="combo-display">
+    <div>Скорость</div>
+    <div class="combo-x" id="comboDisplay">×1.0</div>
   </div>
 
   <button id="hint-btn" onclick="showHint()">💡 Подсказка (H)</button>
@@ -341,6 +358,11 @@ const LEVEL_THEMES = [
   { name:"Зеркальный Лабиринт", fog:0x0a0a12, amb:0x101028, accent:0x44cccc, wall:0x1a1a28, torch:0x44cccc },
   { name:"Финальное Испытание", fog:0x120a08, amb:0x281a10, accent:0xffd700, wall:0x282018, torch:0xffd700 },
 ];
+
+const COMBO_THRESHOLDS = [15, 25, 40, 60];
+const COMBO_MULTIPLIERS = [3.0, 2.0, 1.5, 1.0];
+let levelStartTime = 0;
+let comboMultiplier = 1;
 
 let audioCtx = null;
 function getAudioCtx() {
@@ -1049,6 +1071,9 @@ function fadeTransition(text, callback) {
 function buildLevel(levelIndex) {
   clearLevel();
   interactiveObjects = [];
+  levelStartTime = Date.now();
+  comboMultiplier = 1;
+  updateComboDisplay();
 
   const s = SCORE_PER_LEVEL[levelIndex] || 100;
 
@@ -1508,6 +1533,15 @@ function addScore(pts) {
   document.getElementById('scoreDisplay').textContent = score;
 }
 
+function updateComboDisplay() {
+  const el = document.getElementById('comboDisplay');
+  const wrap = document.getElementById('combo-display');
+  el.textContent = `×${comboMultiplier.toFixed(1)}`;
+  wrap.className = '';
+  if(comboMultiplier >= 3) wrap.className = 'super';
+  else if(comboMultiplier >= 1.5) wrap.className = 'fast';
+}
+
 function openDoor(doorObj) {
   if(doorObj.open) return;
   doorObj.open = true;
@@ -1588,12 +1622,25 @@ function checkPuzzleSolved() {
     const doorObj = interactiveObjects.find(o=>o.type==='door' && !o.open);
     if(doorObj) {
       openDoor(doorObj);
-      const pts = SCORE_PER_LEVEL[currentLevel] || 100;
-      const bonus = hintUsed ? 0 : Math.floor(pts*0.3);
-      addScore(pts + bonus);
+      const elapsed = (Date.now() - levelStartTime) / 1000;
+      comboMultiplier = COMBO_MULTIPLIERS[COMBO_THRESHOLDS.findIndex(t => elapsed <= t)] || 1.0;
+      if(elapsed <= COMBO_THRESHOLDS[0]) comboMultiplier = COMBO_MULTIPLIERS[0];
+      else if(elapsed <= COMBO_THRESHOLDS[1]) comboMultiplier = COMBO_MULTIPLIERS[1];
+      else if(elapsed <= COMBO_THRESHOLDS[2]) comboMultiplier = COMBO_MULTIPLIERS[2];
+      else comboMultiplier = COMBO_MULTIPLIERS[3];
+      updateComboDisplay();
 
+      const pts = SCORE_PER_LEVEL[currentLevel] || 100;
+      const hintBonus = hintUsed ? 0 : Math.floor(pts*0.3);
+      const comboBonus = Math.floor(pts * (comboMultiplier - 1));
+      const total = pts + hintBonus + comboBonus;
+      addScore(total);
+
+      let msg = `Превосходно! Дверь открыта. +${total} очков`;
+      if(hintBonus > 0) msg += ` (${hintBonus} за без подсказки)`;
+      if(comboMultiplier > 1) msg += ` (${comboMultiplier}× за ${Math.floor(elapsed)}с)`;
       document.getElementById('guideText').innerHTML =
-        `<span class="guide-avatar">🔮</span> Превосходно! Дверь открыта. +${pts} очков${bonus>0?`, +${bonus} за без подсказки`:''}!`;
+        `<span class="guide-avatar">🔮</span> ${msg}!`;
 
       setTimeout(()=>{
         if(currentLevel < LEVEL_COUNT - 1) {
@@ -1776,6 +1823,22 @@ function animate() {
 
   checkPlayerAtReceiver();
   checkCorridor();
+
+  if(!corridorMode) {
+    const elapsed = (Date.now() - levelStartTime) / 1000;
+    let liveMult = COMBO_MULTIPLIERS[3];
+    for(let i = 0; i < COMBO_THRESHOLDS.length; i++) {
+      if(elapsed <= COMBO_THRESHOLDS[i]) { liveMult = COMBO_MULTIPLIERS[i]; break; }
+    }
+    const el = document.getElementById('comboDisplay');
+    const wrap = document.getElementById('combo-display');
+    if(el) el.textContent = `×${liveMult.toFixed(1)}`;
+    if(wrap) {
+      wrap.className = '';
+      if(liveMult >= 3) wrap.className = 'super';
+      else if(liveMult >= 1.5) wrap.className = 'fast';
+    }
+  }
 
   updateMinimap();
   updateInteractionPrompt();
