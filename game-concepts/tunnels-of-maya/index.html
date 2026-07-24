@@ -149,6 +149,19 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 }
 #nv-btn:hover { background:rgba(34,197,94,0.2); }
 #nv-btn.active { background:rgba(34,197,94,0.3); border-color:#4ade80; box-shadow:0 0 20px rgba(34,197,94,0.5); }
+
+#fade-overlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:#0a0508; z-index:50; opacity:0;
+  pointer-events:none; transition: opacity 0.8s;
+}
+#fade-overlay.active { opacity:1; pointer-events:auto; }
+#fade-overlay .fade-text {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  color:#c9a84c; font-size:16px; text-align:center; opacity:0;
+  transition: opacity 0.5s 0.4s;
+}
+#fade-overlay.active .fade-text { opacity:1; }
 </style>
 </head>
 <body>
@@ -203,6 +216,10 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
     <div class="wisdom-lang" id="wisdomLang"></div>
     <button class="wisdom-close" onclick="closeWisdom()">Продолжить</button>
   </div>
+</div>
+
+<div id="fade-overlay">
+  <div class="fade-text" id="fadeText">Движение по тоннелю...</div>
 </div>
 
 <script type="importmap">
@@ -267,7 +284,8 @@ const GUIDE_MESSAGES = {
   hint4: "Красный луч в красное гнездо, синий в синее, зелёный в зелёное.",
   hint5: "Символы: Солнце → Луна → Звезда → Змей. Запомни顺序!",
   hint6: "Иди только к зеркалам, которые отражают в сторону цели.",
-  hint7: "Последняя комбинация: Красный рычаг → Столбик «Солнце» → Красное зеркало."
+  hint7: "Последняя комбинация: Красный рычаг → Столбик «Солнце» → Красное зеркало.",
+  deadend: ["Тупик! Но здесь есть что-то интересное...", "Коридор неудачь. Поверни назад.", "Здесь ничего нет... или почти ничего."]
 };
 
 let scene, camera, renderer, clock;
@@ -754,6 +772,156 @@ function clearLevel() {
 
   const ambLight = new THREE.AmbientLight(0x1a0f0a, 0.3);
   scene.add(ambLight);
+}
+
+let corridorMode = false;
+let corridorDeadEnd = false;
+let corridorGoalZ = 0;
+let corridorBranches = [];
+
+const DEAD_END_MSGS = [
+  "Тупик! Но здесь есть что-то интересное...",
+  "Коридор неудачь... зато +20 очков за смелость!",
+  "Каменные стены. Поверните назад.",
+  "Здесь ничего нет... или почти ничего.",
+  "Духи шепчут: «Неправильный путь».",
+];
+
+function buildCorridor(fromLevel) {
+  clearLevel();
+  corridorMode = true;
+  corridorDeadEnd = false;
+
+  const w = 3, h = 3, segLen = 8;
+  const corridorLen = 25;
+  const branchLen = 12;
+
+  createFloor(0, 0, w, corridorLen);
+  createTunnelWall(-w/2, h/2, 0, 0.5, h, corridorLen);
+  createTunnelWall(w/2, h/2, 0, 0.5, h, corridorLen);
+  createTunnelWall(0, h/2, -corridorLen/2, w, h, 0.5);
+
+  const ceilGeo = new THREE.PlaneGeometry(w, corridorLen);
+  const ceilMat = createMayanMaterial(0x1a1210);
+  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = h;
+  scene.add(ceil);
+
+  for(let z = -corridorLen/2 + 3; z < corridorLen/2 - 2; z += 5) {
+    addTorches(new THREE.Vector3(-w/2 + 0.3, 0.5, z));
+    addTorches(new THREE.Vector3(w/2 - 0.3, 0.5, z));
+  }
+
+  corridorBranches = [];
+  const branchCount = 1 + Math.floor(Math.random()*2);
+  const correctBranch = Math.floor(Math.random() * (branchCount + 1));
+
+  for(let i = 0; i < branchCount; i++) {
+    const bz = -corridorLen/2 + 6 + i * 8;
+    const side = (i % 2 === 0) ? -1 : 1;
+    const bx = side * (w/2 + branchLen/2);
+
+    createFloor(bx, bz, branchLen, w);
+    createTunnelWall(bx - branchLen/2, h/2, bz, branchLen, h, 0.5);
+    createTunnelWall(bx + branchLen/2, h/2, bz, branchLen, h, 0.5);
+    createTunnelWall(bx, h/2, bz - w/2, 0.5, h, w);
+    createTunnelWall(bx, h/2, bz + w/2, 0.5, h, w);
+
+    const ceilGeo2 = new THREE.PlaneGeometry(branchLen, w);
+    const ceil2 = new THREE.Mesh(ceilGeo2, ceilMat.clone());
+    ceil2.rotation.x = Math.PI/2;
+    ceil2.position.set(bx, h, bz);
+    scene.add(ceil2);
+
+    const isDeadEnd = (i !== correctBranch);
+    corridorBranches.push({ x: bx, z: bz, deadEnd: isDeadEnd, collected: false });
+
+    const markerColor = isDeadEnd ? 0xff4444 : 0x44ff44;
+    const markerGeo = new THREE.SphereGeometry(0.15, 8, 8);
+    const markerMat = new THREE.MeshStandardMaterial({
+      color: markerColor, emissive: markerColor, emissiveIntensity: 1.5
+    });
+    const marker = new THREE.Mesh(markerGeo, markerMat);
+    marker.position.set(bx + side * (branchLen/2 - 0.5), 1.5, bz);
+    scene.add(marker);
+    glowObjects.push(marker);
+    addGlowLight(marker.position.clone(), markerColor, 0.8, 4);
+
+    if(isDeadEnd) {
+      createDecorSkull(bx, 1.5, bz);
+      createSign(bx, 2.2, bz, "⚠ Тупик", 0xff4444);
+    } else {
+      createSign(bx, 2.2, bz, "→ Путь дальше", 0x44ff44);
+    }
+  }
+
+  corridorGoalZ = corridorLen/2 - 1;
+  const goalGeo = new THREE.TorusGeometry(0.6, 0.05, 8, 32);
+  const goalMat = new THREE.MeshStandardMaterial({
+    color: 0xc9a84c, emissive: 0xc9a84c, emissiveIntensity: 2
+  });
+  const goal = new THREE.Mesh(goalGeo, goalMat);
+  goal.rotation.x = Math.PI/2;
+  goal.position.set(0, 1.5, corridorGoalZ);
+  scene.add(goal);
+  addGlowLight(new THREE.Vector3(0, 1.5, corridorGoalZ), 0xc9a84c, 2, 5);
+  glowObjects.push(goal);
+
+  const deadEndMsg = DEAD_END_MSGS[Math.floor(Math.random()*DEAD_END_MSGS.length)];
+  document.getElementById('guideText').innerHTML =
+    `<span class="guide-avatar">🔮</span> Коридор пирамиды. Найди правильный путь. Тупики дают +20 очков.`;
+
+  playerPos.set(0, 1.7, -corridorLen/2 + 2);
+  camera.position.copy(playerPos);
+
+  scene.fog = new THREE.FogExp2(0x0a0508, 0.06);
+}
+
+function checkCorridor() {
+  if(!corridorMode) return;
+
+  if(playerPos.z > corridorGoalZ - 1) {
+    corridorMode = false;
+    fadeTransition(`Уровень ${currentLevel + 2}`, () => {
+      currentLevel++;
+      if(currentLevel >= LEVEL_COUNT) {
+        document.getElementById('finalScore').textContent = score;
+        document.getElementById('completion-screen').style.display = 'flex';
+      } else {
+        hintUsed = false;
+        buildLevel(currentLevel);
+      }
+    });
+    return;
+  }
+
+  for(const b of corridorBranches) {
+    if(b.deadEnd && !b.collected) {
+      const dist = playerPos.distanceTo(new THREE.Vector3(b.x, playerPos.y, b.z));
+      if(dist < 2) {
+        b.collected = true;
+        addScore(20);
+        document.getElementById('guideText').innerHTML =
+          `<span class="guide-avatar">🔮</span> ${DEAD_END_MSGS[Math.floor(Math.random()*DEAD_END_MSGS.length)]}`;
+        showGuide('deadend');
+      }
+    }
+  }
+}
+
+function fadeTransition(text, callback) {
+  const overlay = document.getElementById('fade-overlay');
+  const fadeText = document.getElementById('fadeText');
+  fadeText.textContent = text;
+  overlay.classList.add('active');
+
+  setTimeout(()=>{
+    callback();
+    setTimeout(()=>{
+      overlay.classList.remove('active');
+    }, 600);
+  }, 1000);
 }
 
 function buildLevel(levelIndex) {
@@ -1256,15 +1424,15 @@ function checkPuzzleSolved() {
         `<span class="guide-avatar">🔮</span> Превосходно! Дверь открыта. +${pts} очков${bonus>0?`, +${bonus} за без подсказки`:''}!`;
 
       setTimeout(()=>{
-        currentLevel++;
-        if(currentLevel >= LEVEL_COUNT) {
+        if(currentLevel < LEVEL_COUNT - 1) {
+          fadeTransition('Движение по тоннелю...', () => {
+            buildCorridor(currentLevel);
+          });
+        } else {
           document.getElementById('finalScore').textContent = score;
           document.getElementById('completion-screen').style.display = 'flex';
-        } else {
-          hintUsed = false;
-          buildLevel(currentLevel);
         }
-      }, 3000);
+      }, 2000);
     }
   }
 }
@@ -1386,9 +1554,11 @@ function animate() {
   playerPos.x += velocity.x * dt;
   playerPos.z += velocity.z * dt;
 
-  const roomBounds = { minX:-10, maxX:10, minZ:-12, maxZ:12 };
-  if(currentLevel === 5) { roomBounds.minX=-9.5; roomBounds.maxX=9.5; roomBounds.minZ=-9.5; roomBounds.maxZ=9.5; }
-  if(currentLevel === 6) { roomBounds.minX=-10.5; roomBounds.maxX=10.5; roomBounds.minZ=-11.5; roomBounds.maxZ=11.5; }
+  const roomBounds = corridorMode
+    ? { minX:-15, maxX:15, minZ:-15, maxZ:15 }
+    : { minX:-10, maxX:10, minZ:-12, maxZ:12 };
+  if(!corridorMode && currentLevel === 5) { roomBounds.minX=-9.5; roomBounds.maxX=9.5; roomBounds.minZ=-9.5; roomBounds.maxZ=9.5; }
+  if(!corridorMode && currentLevel === 6) { roomBounds.minX=-10.5; roomBounds.maxX=10.5; roomBounds.minZ=-11.5; roomBounds.maxZ=11.5; }
 
   playerPos.x = Math.max(roomBounds.minX, Math.min(roomBounds.maxX, playerPos.x));
   playerPos.z = Math.max(roomBounds.minZ, Math.min(roomBounds.maxZ, playerPos.z));
@@ -1432,6 +1602,7 @@ function animate() {
   }
 
   checkPlayerAtReceiver();
+  checkCorridor();
 
   updateMinimap();
   updateInteractionPrompt();
