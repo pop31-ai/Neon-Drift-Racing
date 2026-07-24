@@ -162,6 +162,24 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
   transition: opacity 0.5s 0.4s;
 }
 #fade-overlay.active .fade-text { opacity:1; }
+
+#pause-menu {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(10,5,8,0.92); z-index:60;
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+#pause-menu.active { display:flex; }
+#pause-menu h2 { font-size:32px; color:#c9a84c; margin-bottom:6px; letter-spacing:3px; }
+#pause-menu .pause-sub { font-size:13px; color:#a89060; margin-bottom:30px; }
+#pause-menu button {
+  display:block; width:220px; margin:8px 0; padding:12px 0;
+  background:rgba(201,168,76,0.1); border:1px solid #c9a84c;
+  border-radius:10px; color:#e8d48b; font-size:15px; cursor:pointer;
+  transition: background 0.2s;
+}
+#pause-menu button:hover { background:rgba(201,168,76,0.25); }
+#pause-menu .pause-stats { margin-top:20px; font-size:12px; color:#7a6a4a; text-align:center; line-height:1.8; }
 </style>
 </head>
 <body>
@@ -220,6 +238,15 @@ body { overflow:hidden; background:#0a0508; font-family:'Segoe UI',sans-serif; }
 
 <div id="fade-overlay">
   <div class="fade-text" id="fadeText">Движение по тоннелю...</div>
+</div>
+
+<div id="pause-menu">
+  <h2>ПАУЗА</h2>
+  <div class="pause-sub">Тоннели Майя</div>
+  <button onclick="resumeGame()">Продолжить</button>
+  <button onclick="restartGame()">Начать заново</button>
+  <button onclick="exitToMenu()">Выйти в меню</button>
+  <div class="pause-stats" id="pauseStats"></div>
 </div>
 
 <script type="importmap">
@@ -1435,6 +1462,47 @@ function exitGame() {
   showWisdom();
 }
 
+let gamePaused = false;
+
+function togglePause() {
+  gamePaused = !gamePaused;
+  const menu = document.getElementById('pause-menu');
+  menu.classList.toggle('active', gamePaused);
+  if(gamePaused) {
+    document.getElementById('pauseStats').innerHTML =
+      `Уровень ${currentLevel+1} / ${LEVEL_COUNT}<br>Очки: ${score}<br>Путь: ${LEVEL_THEMES[currentLevel]?.name || 'Тоннели'}`;
+  }
+}
+
+function resumeGame() {
+  gamePaused = false;
+  document.getElementById('pause-menu').classList.remove('active');
+  document.getElementById('gameCanvas').requestPointerLock();
+}
+
+function restartGame() {
+  gamePaused = false;
+  document.getElementById('pause-menu').classList.remove('active');
+  currentLevel = 0;
+  score = 0;
+  hintUsed = false;
+  corridorMode = false;
+  document.getElementById('scoreDisplay').textContent = '0';
+  buildLevel(0);
+  document.getElementById('gameCanvas').requestPointerLock();
+}
+
+function exitToMenu() {
+  gamePaused = false;
+  document.getElementById('pause-menu').classList.remove('active');
+  localStorage.setItem('maya_tunnel_save', JSON.stringify({
+    level: currentLevel, score: score
+  }));
+  document.getElementById('completion-screen').style.display = 'flex';
+  document.getElementById('finalScore').textContent = score;
+  document.querySelector('#completion-screen p').textContent = 'Прогресс сохранён. Вернитесь когда захотите!';
+}
+
 function addScore(pts) {
   score += pts;
   document.getElementById('scoreDisplay').textContent = score;
@@ -1640,6 +1708,7 @@ function interactWithClosest() {
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
+  if(gamePaused) return;
 
   const dir = new THREE.Vector3();
   if(moveState.forward) dir.z -= 1;
@@ -1869,6 +1938,7 @@ function setupInput() {
     if(e.code === 'KeyN') toggleNightVision();
     if(e.code === 'Escape') {
       document.exitPointerLock();
+      togglePause();
     }
   });
 
@@ -1941,6 +2011,9 @@ window.showHint = showHint;
 window.closeWisdom = closeWisdom;
 window.exitGame = exitGame;
 window.toggleNightVision = toggleNightVision;
+window.resumeGame = resumeGame;
+window.restartGame = restartGame;
+window.exitToMenu = exitToMenu;
 
 setupInput();
 animateIntro();
