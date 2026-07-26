@@ -1185,49 +1185,112 @@ function drawCorridor3D(cx,cy,cz,cyaw,cpitch){
 
 function updateHeliPhysics(dt){
   if(paused)return;
-  var ac=0.08,dr=0.97,rt=0.03;
-  if(diff==='easy'){ac*=1.3;dr=0.95;rt=0.05;}
-  if(diff==='hard'){ac*=0.7;dr=0.99;rt=0.02;}
+  var ht=HELI_TYPES[heliType];
+  var mass=1.0,dragH=0.96,dragV=0.93,grav=9.8;
+  if(heliType===2){mass=1.8;dragH=0.97;}
+  if(heliType===3){mass=1.2;dragH=0.95;}
+  if(heliType===4){mass=0.8;dragH=0.94;}
+  if(heliType===5){mass=2.2;dragH=0.98;}
+  if(heliType===6){mass=0.7;dragH=0.93;}
+  if(heliType===7){mass=1.3;dragH=0.96;}
 
-  var mx=0,mz=0,turn=0,thr=0,bst=0,vup=0;
-  if(keys['KeyW']||keys['ArrowUp'])mz=-1;if(keys['KeyS']||keys['ArrowDown'])mz=1;
-  if(keys['KeyA'])mx=-1;if(keys['KeyD'])mx=1;
-  if(keys['KeyQ'])turn=-1;if(keys['KeyE'])turn=1;if(keys['ArrowLeft'])turn=1;if(keys['ArrowRight'])turn=-1;
-  if(keys['ShiftLeft']||keys['ShiftRight'])thr=1;
-  if(keys['Space']&&boostFuel>0){bst=1;}
-  if(keys['KeyR'])vup=1;if(keys['KeyF'])vup=-1;
-  mx=Math.max(-1,Math.min(1,mx+(jlAct.a?jlAct.x:0)));
-  mz=Math.max(-1,Math.min(1,mz+(jlAct.a?jlAct.y:0)));
-  turn=Math.max(-1,Math.min(1,turn+(jrAct.a?jrAct.x:0)));
-  thr=Math.max(0,Math.min(1,thr+(jrAct.a?-jrAct.y:0)));
+  if(diff==='easy'){dragH=0.94;grav=7;}
+  if(diff==='hard'){dragH=0.98;grav=11;}
 
-  if(bst>0){boostFuel=Math.max(0,boostFuel-dt*20);}
-  else{boostFuel=Math.min(100,boostFuel+dt*4);}
+  var cyclicF=0,cyclicS=0,pedalYaw=0,collective=0,bst=0;
+  if(keys['KeyW']||keys['ArrowUp'])cyclicF=-1;
+  if(keys['KeyS']||keys['ArrowDown'])cyclicF=1;
+  if(keys['KeyA'])cyclicS=-1;
+  if(keys['KeyD'])cyclicS=1;
+  if(keys['KeyQ'])pedalYaw=-1;
+  if(keys['KeyE'])pedalYaw=1;
+  if(keys['ArrowLeft'])pedalYaw=1;
+  if(keys['ArrowRight'])pedalYaw=-1;
+  if(keys['ShiftLeft']||keys['ShiftRight'])collective=1;
+  if(keys['KeyR'])collective=0.7;
+  if(keys['KeyF'])collective=-0.5;
+  if(keys['Space']&&boostFuel>0)bst=1;
 
-  droneYaw+=turn*rt;
+  cyclicF=Math.max(-1,Math.min(1,cyclicF+(jlAct.a?jlAct.y:0)));
+  cyclicS=Math.max(-1,Math.min(1,cyclicS+(jlAct.a?jlAct.x:0)));
+  pedalYaw=Math.max(-1,Math.min(1,pedalYaw+(jrAct.a?jrAct.x:0)));
+  collective=Math.max(-1,Math.min(1,collective+(jrAct.a?-jrAct.y:0)));
+
+  if(bst>0)boostFuel=Math.max(0,boostFuel-dt*20);
+  else boostFuel=Math.min(100,boostFuel+dt*4);
+
+  droneYaw+=pedalYaw*0.04*(1/mass);
+
   var fwdX=Math.sin(camYaw),fwdZ=Math.cos(camYaw);
   var rX=Math.cos(camYaw),rZ=-Math.sin(camYaw);
-  var sm=thr>0?0.6:0.3;
-  if(bst>0)sm*=1.5;
-  droneVX+=(rX*mx+fwdX*(-mz))*ac*sm;
-  droneVZ+=(rZ*mx+fwdZ*(-mz))*ac*sm;
-  droneVX*=dr;droneVZ*=dr;
 
-  var lift=thr*14+vup*10;
-  droneVY+=(-9.8+lift)*dt;
-  droneVY*=0.92;
-  droneX+=droneVX;droneZ+=droneVZ;
+  var tiltAngle=dronePitch*0.3;
+  var tiltFwdX=Math.sin(droneYaw),tiltFwdZ=Math.cos(droneYaw);
+  var tiltRX=Math.cos(droneYaw),tiltRZ=-Math.sin(droneYaw);
+
+  var liftForce=collective*16/mass;
+  if(bst>0)liftForce*=1.4;
+  var speed=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
+
+  var transLift=1.0+Math.min(speed*0.15,0.5);
+  liftForce*=transLift;
+
+  var gEffect=1.0;
+  if(droneY<8)gEffect=1.0+(8-droneY)*0.05;
+  liftForce*=gEffect;
+
+  droneVY+=(-grav+liftForce)*dt;
+  droneVY*=dragV;
+
+  var tiltAccel=0.12/mass;
+  var tiltVX=tiltFwdX*cyclicF+tiltRX*cyclicS;
+  var tiltVZ=tiltFwdZ*cyclicF+tiltRZ*cyclicS;
+  droneVX+=tiltVX*tiltAccel*liftForce*0.3;
+  droneVZ+=tiltVZ*tiltAccel*liftForce*0.3;
+
+  var groundDrag=droneY<3?0.92:1.0;
+  droneVX*=dragH*groundDrag;
+  droneVZ*=dragH*groundDrag;
+
+  droneX+=droneVX;
+  droneZ+=droneVZ;
   droneY+=droneVY;
-  if(droneY<0.5){droneY=0.5;droneVY=0;}
-  if(droneY>200){droneY=200;droneVY*=-0.3;}
-  var tp=0.1*mz,trl=-0.1*mx-turn*0.4;
-  dronePitch+=(tp-dronePitch)*0.1;droneRoll+=(trl-droneRoll)*0.1;
-  droneVisYaw+=(turn*0.8-droneVisYaw)*0.2;
 
-  if(opSettings.particles&&Math.abs(droneVY)>0.5){
-    particles.push({x:droneX+(Math.random()-.5)*.6,y:droneY-1,z:droneZ+(Math.random()-.5)*.6,life:0.8,vx:(Math.random()-.5)*.3,vy:-Math.abs(droneVY)*0.3,vz:(Math.random()-.5)*.3,color:'200,200,200',size:2+Math.random()});
+  if(droneY<0.3){droneY=0.3;droneVY=Math.abs(droneVY)*0.1;droneVX*=0.95;droneVZ*=0.95;}
+  if(droneY>200){droneY=200;droneVY*=-0.2;}
+
+  var targetPitch=cyclicF*0.5;
+  var targetRoll=cyclicS*0.5-pedalYaw*0.15*speed*0.05;
+  dronePitch+=(targetPitch-dronePitch)*0.08;
+  droneRoll+=(targetRoll-droneRoll)*0.08;
+  droneVisYaw+=(pedalYaw*0.6-droneVisYaw)*0.15;
+
+  if(opSettings.particles){
+    if(Math.abs(droneVY)>0.8||collective>0.3){
+      var pStr=collective>0.3?0.8:0.3;
+      for(var pi=0;pi<2;pi++){
+        particles.push({
+          x:droneX+(Math.random()-.5)*1.2,
+          y:droneY-0.8,
+          z:droneZ+(Math.random()-.5)*1.2,
+          life:0.6+Math.random()*0.4,
+          vx:(Math.random()-.5)*pStr,
+          vy:-Math.abs(droneVY)*0.4-1,
+          vz:(Math.random()-.5)*pStr,
+          color:'180,200,220',size:1.5+Math.random()*2
+        });
+      }
+    }
+    if(bst>0){
+      particles.push({
+        x:droneX+(Math.random()-.5)*0.5,
+        y:droneY-0.5,
+        z:droneZ+(Math.random()-.5)*0.5,
+        life:0.3,vx:(Math.random()-.5)*0.2,vy:-2,vz:(Math.random()-.5)*0.2,
+        color:'0,200,255',size:3+Math.random()*2
+      });
+    }
   }
-
   for(var i=0;i<particles.length;i++){
     var pp=particles[i];
     pp.life-=dt*1.5;pp.x+=pp.vx*dt*2;pp.y+=pp.vy*dt*2;pp.z+=pp.vz*dt*2;
@@ -1235,20 +1298,22 @@ function updateHeliPhysics(dt){
   }
   for(var i=particles.length-1;i>=0;i--)if(particles[i].life<=0)particles.splice(i,1);
 
-  if(opSettings.speedLines){
-    var spd=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
-    if(spd>2&&speedLines.length<30){
-      var perpX=-fwdZ,perpZ=fwdX;
-      var side=Math.random()>0.5?1:-1;
-      speedLines.push({x:droneX+perpX*side*(3+Math.random()*10),y:droneY+(Math.random()-.5)*6,z:droneZ+perpZ*side*(3+Math.random()*10),life:1,len:8+Math.random()*15});
-    }
+  if(opSettings.speedLines&&speed>2&&speedLines.length<30){
+    var perpX=-fwdZ,perpZ=fwdX;
+    var side=Math.random()>0.5?1:-1;
+    speedLines.push({
+      x:droneX+perpX*side*(3+Math.random()*10),
+      y:droneY+(Math.random()-.5)*6,
+      z:droneZ+perpZ*side*(3+Math.random()*10),
+      life:1,len:8+Math.random()*15
+    });
   }
-  for(var i=0;i<speedLines.length;i++){speedLines[i].life-=dt*3;}
+  for(var i=0;i<speedLines.length;i++)speedLines[i].life-=dt*3;
   for(var i=speedLines.length-1;i>=0;i--)if(speedLines[i].life<=0)speedLines.splice(i,1);
 
-  var next=(lastCP+1)%checkpoints.length,cp=checkpoints[next];
-  var dx=droneX-cp.x,dz=droneZ-cp.z;
-  if(Math.sqrt(dx*dx+dz*dz)<cp.w+5){
+  var next=(lastCP+1)%checkpoints.length,cpp=checkpoints[next];
+  var dx=droneX-cpp.x,dz=droneZ-cpp.z;
+  if(Math.sqrt(dx*dx+dz*dz)<cpp.w+5){
     lastCP=next;cpHashes.push({cp:next,t:raceTime});playSound('cp');
     if(next===checkpoints.length-1)allCP=true;
     if(next===0&&allCP&&raceTime>1){
@@ -1258,12 +1323,12 @@ function updateHeliPhysics(dt){
     }
   }
 
-  var spdKmh=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ)*36|0;
+  var spdKmh=speed*36|0;
   document.getElementById('hs').textContent=spdKmh+' km/h';
   document.getElementById('boost-fill').style.width=boostFuel+'%';
   if(boostFuel<20)document.getElementById('boost-fill').style.background='linear-gradient(90deg,#f80,#f00)';
   else document.getElementById('boost-fill').style.background='linear-gradient(90deg,#0af,#0ff)';
-  updateEngineSound(Math.sqrt(droneVX*droneVX+droneVZ*droneVZ)/5,thr,bst);
+  updateEngineSound(speed/5,collective,bst);
   checkWallCollision();
   if(collideFlash>0)collideFlash-=dt;
 }
