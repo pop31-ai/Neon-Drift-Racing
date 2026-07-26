@@ -131,7 +131,7 @@ button{font-family:inherit}
     <div class="sr"><label>Difficulty</label><select id="sd"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></div>
     <div class="sr"><label>Camera</label><select id="sc"><option value="chase">Chase</option><option value="fpv">FPV</option><option value="top">Top-down</option></select></div>
     <div class="sr"><label>Vehicle</label><select id="sv"><option value="drone">Drone</option><option value="heli">Helicopter</option></select></div>
-    <div class="sr" id="heli-type-row" style="display:none"><label>Heli Type</label><select id="sht"><option value="0">SkyHawk 44</option><option value="1">Vortex 206</option><option value="2">Storm-8</option><option value="3">EuroCopter 135</option></select></div>
+    <div class="sr" id="heli-type-row" style="display:none"><label>Heli Type</label><select id="sht"><option value="0">SkyHawk 44</option><option value="1">Vortex 206</option><option value="2">Storm-8</option><option value="3">EuroCopter 135</option><option value="4">Falcon X1</option><option value="5">Titan H9</option><option value="6">AeroSwift 72</option><option value="7">NovaCopter 212</option></select></div>
   </div>
   <div id="champ-progress" class="msec" style="display:none"></div>
   <div class="br">
@@ -358,7 +358,11 @@ var HELI_TYPES=[
   {name:'SkyHawk 44',desc:'Bubble canopy, light sport',color:'#e8e8f0'},
   {name:'Vortex 206',desc:'Classic utility, rounded nose',color:'#c0c8d0'},
   {name:'Storm-8',desc:'Heavy transport, twin engine',color:'#7a8a6a'},
-  {name:'EuroCopter 135',desc:'Fenestron tail, modern medevac',color:'#f0f0ff'}
+  {name:'EuroCopter 135',desc:'Fenestron tail, modern medevac',color:'#f0f0ff'},
+  {name:'Falcon X1',desc:'Agile attack, stealth coating',color:'#4a5a6a'},
+  {name:'Titan H9',desc:'Heavy lifter, dual rotor',color:'#8a7a5a'},
+  {name:'AeroSwift 72',desc:'Racing variant, minimal frame',color:'#5a8a7a'},
+  {name:'NovaCopter 212',desc:'VIP transport, luxury cabin',color:'#d0c8e0'}
 ];
 var raceTime=0,curLap=1,lastLapT=0,bestLap=Infinity,laps=[];
 var lastCP=-1,allCP=false,cpHashes=[];
