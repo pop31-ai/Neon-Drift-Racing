@@ -137,6 +137,7 @@ button{font-family:inherit}
   <div class="br">
     <button class="btn" id="bf">Free Race</button>
     <button class="btn p" id="bc">Championship</button>
+    <button class="btn" id="bt" style="border-color:#0f0;color:#0f0">Trainer</button>
   </div>
   <div style="margin-top:12px;color:#555;font-size:10px">WASD + QE + RF + Shift + Space | V=Heli | C=Camera | F1=Debug</div>
 </div>
@@ -2028,6 +2029,7 @@ function render(){
   if(state==='racing'){
     raceTime+=1/60;
     if(heliMode)updateHeliPhysics(1/60);else updatePhysics(1/60);
+    if(trainerMode)updateTrainer(1/60);
     updateBots(1/60);
     updateCPIndicator();
     telemTimer+=1/60;if(telemTimer>0.5){telemTimer=0;updateTelemetry();}
@@ -2049,6 +2051,7 @@ function render(){
     if(opSettings.fog)drawFogOverlay();
     if(collideFlash>0){X.fillStyle='rgba(255,50,0,'+(collideFlash*0.5)+')';X.fillRect(0,0,W,H);}
     drawMinimap();drawHUD();drawHeliCockpit();
+    if(trainerMode)drawTrainerPads(cam.x,cam.y,cam.z,cam.yw,cam.cp);
     if(debugOn){drawDebug();drawDebugWalls(cam.x,cam.y,cam.z,cam.yw,cam.cp);}
     var vehLabel=heliMode?'HELICOPTER':'DRONE';
     X.fillStyle='#0ff';X.font='bold 9px sans-serif';X.textAlign='center';
@@ -2139,6 +2142,7 @@ function getCam(){
 
 document.getElementById('bf').addEventListener('click',startFreeRace);
 document.getElementById('bc').addEventListener('click',startChamp);
+document.getElementById('bt').addEventListener('click',startTrainer);
 document.getElementById('sv').addEventListener('change',function(){document.getElementById('heli-type-row').style.display=this.value==='heli'?'':'none';});
 document.getElementById('pause-btn').addEventListener('click',togglePause);
 document.getElementById('br2').addEventListener('click',togglePause);
@@ -2148,6 +2152,201 @@ document.getElementById('bnxt').addEventListener('click',nextRace);
 document.getElementById('bac').addEventListener('click',function(){document.getElementById('anti-cheat').classList.remove('show');});
 
 var JS75=function(){return 'JS75 was here';};
+
+var trainerMode=false;
+var trainerTask=0;
+var trainerTimer=0;
+var trainerHoverTime=0;
+var trainerScore=0;
+var trainerPads=[];
+var trainerMsg='';
+var trainerMsgTimer=0;
+var TRAINER_TASKS=[
+  {name:'HOVER',desc:'Maintain altitude 5-10m over the green pad for 5 seconds',type:'hover',alt:7,time:5,padX:0,padZ:30},
+  {name:'FORWARD FLIGHT',desc:'Fly forward to the blue pad at 20km/h+',type:'flyto',alt:10,tgtX:0,tgtZ:80,minSpd:20},
+  {name:'SLOW APPROACH',desc:'Approach the yellow pad slowly, under 15km/h',type:'land',alt:3,tgtX:40,tgtZ:60,maxSpd:15},
+  {name:'SIDE SLIP',desc:'Hold hover at 10m while drifting sideways through rings',type:'sideslip',alt:10,time:8},
+  {name:'AUTOROTATION',desc:'Engine off! Glide down to the emergency pad',type:'autorot',tgtX:-30,tgtZ:90},
+  {name:'CONFINED AREA',desc:'Navigate between buildings and land on the pad',type:'confined',alt:8,tgtX:50,tgtZ:100}
+];
+function startTrainer(){
+  trainerMode=true;trainerTask=0;trainerTimer=0;trainerScore=0;
+  heliMode=true;camMode='chase';
+  setupTrainerPad();
+  heliType=+document.getElementById('sht').value;
+  state='countdown';cdCount=3;cdTimer=0;
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('hud').style.display='';
+  document.getElementById('pause-btn').style.display='';
+  document.getElementById('cp-ind').style.display='none';
+  document.getElementById('boost-bar').style.display='';
+  document.getElementById('op-toggle').style.display='block';
+  initAudio();
+  if(innerWidth<=1024||navigator.maxTouchPoints>0){document.getElementById('gp-left').classList.add('show');document.getElementById('gp-right').classList.add('show');}
+}
+function setupTrainerPad(){
+  var t=TRAINER_TASKS[trainerTask];
+  if(!t){trainerMode=false;toMenu();return;}
+  trainerHoverTime=0;trainerTimer=0;
+  droneX=0;droneY=15;droneZ=0;droneVX=droneVY=droneVZ=0;
+  dronePitch=droneRoll=0;droneYaw=0;
+  var fwdX=Math.sin(droneYaw),fwdZ=Math.cos(droneYaw);
+  camX=droneX-fwdX*10;camY=droneY+3.5;camZ=droneZ-fwdZ*10;camYaw=droneYaw;
+  raceTime=0;curLap=1;lastLapT=0;bestLap=Infinity;laps=[];
+  lastCP=-1;allCP=false;cpHashes=[];paused=false;particles=[];speedLines=[];boostFuel=100;
+  checkpoints=[];obstacles=[];
+  trainerPads=[];
+  if(t.type==='hover'){
+    trainerPads.push({x:0,z:30,r:8,col:'#0f0',label:'HOVER'});
+  }else if(t.type==='flyto'){
+    trainerPads.push({x:0,z:80,r:8,col:'#44f',label:'TARGET'});
+  }else if(t.type==='land'){
+    trainerPads.push({x:40,z:60,r:8,col:'#ff0',label:'LAND'});
+  }else if(t.type==='sideslip'){
+    for(var i=0;i<5;i++){
+      obstacles.push({type:'ring',x:(i-2)*20,y:10,z:30+i*15,ang:Math.PI/2,r:4,active:true});
+    }
+    trainerPads.push({x:0,z:120,r:8,col:'#f0f',label:'FINISH'});
+  }else if(t.type==='autorot'){
+    trainerPads.push({x:-30,z:90,r:10,col:'#f80',label:'EMERGENCY PAD'});
+  }else if(t.type==='confined'){
+    for(var i=0;i<4;i++){
+      obstacles.push({type:'wall',x:-20+i*25,y:5,z:50+i*20,ang:Math.PI/2,w:12,h:10,t:0,active:true});
+      obstacles.push({type:'wall',x:10+i*25,y:5,z:70+i*20,ang:Math.PI/2,w:12,h:10,t:0,active:true});
+    }
+    trainerPads.push({x:50,z:100,r:8,col:'#0ff',label:'LAND'});
+  }
+}
+function updateTrainer(dt){
+  if(paused||state!=='racing')return;
+  trainerTimer+=dt;
+  var t=TRAINER_TASKS[trainerTask];
+  if(!t)return;
+  var spd=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ)*36;
+  trainerMsgTimer-=dt;
+
+  if(t.type==='hover'){
+    var dx=droneX-t.padX,dz=droneZ-t.padZ;
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    var altOK=droneY>t.alt-2&&droneY<t.alt+3;
+    var spdOK=spd<8;
+    if(dist<t.r&&altOK&&spdOK){
+      trainerHoverTime+=dt;
+      trainerMsg='HOLD IT! '+trainerHoverTime.toFixed(1)+'/'+t.time+'s';
+      trainerMsgTimer=0.5;
+      if(trainerHoverTime>=t.time){
+        trainerScore++;trainerMsg='PASSED!';trainerMsgTimer=2;
+        nextTrainerTask();
+      }
+    }else{
+      trainerHoverTime=Math.max(0,trainerHoverTime-dt*2);
+      if(dist>=t.r)trainerMsg='Move to pad ('+Math.round(dist)+'m away)';
+      else if(!altOK)trainerMsg='Altitude: '+Math.round(droneY)+'m (need '+t.alt+'m)';
+      else if(!spdOK)trainerMsg='Slow down: '+Math.round(spd)+'km/h';
+      trainerMsgTimer=0.3;
+    }
+  }else if(t.type==='flyto'){
+    var dx=droneX-t.tgtX,dz=droneZ-t.tgtZ;
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    if(dist<t.r&&spd>=t.minSpd){
+      trainerScore++;trainerMsg='REACHED!';trainerMsgTimer=2;
+      nextTrainerTask();
+    }else{
+      trainerMsg='Fly to target: '+Math.round(dist)+'m | Speed: '+Math.round(spd)+'km/h';
+      trainerMsgTimer=0.3;
+    }
+  }else if(t.type==='land'){
+    var dx=droneX-t.tgtX,dz=droneZ-t.tgtZ;
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    if(dist<t.r&&spd<t.maxSpd&&droneY<1.5){
+      trainerScore++;trainerMsg='SOFT LANDING!';trainerMsgTimer=2;
+      nextTrainerTask();
+    }else{
+      trainerMsg='Approach slowly: '+Math.round(dist)+'m | '+Math.round(spd)+'km/h';
+      trainerMsgTimer=0.3;
+    }
+  }else if(t.type==='sideslip'){
+    var dx=droneX-0,dz=droneZ-120;
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    if(dist<t.r&&droneY>t.alt-2&&droneY<t.alt+3){
+      trainerScore++;trainerMsg='SLIP COMPLETE!';trainerMsgTimer=2;
+      nextTrainerTask();
+    }else{
+      trainerMsg='Sideslip through rings, maintain '+t.alt+'m';
+      trainerMsgTimer=0.3;
+    }
+  }else if(t.type==='autorot'){
+    if(trainerTimer>2){
+      boostFuel=0;
+      var dx=droneX-t.tgtX,dz=droneZ-t.tgtZ;
+      var dist=Math.sqrt(dx*dx+dz*dz);
+      if(droneY<2&&dist<t.r+5){
+        trainerScore++;trainerMsg='AUTOROTATION LANDED!';trainerMsgTimer=2;
+        nextTrainerTask();
+      }else if(droneY<1){
+        trainerMsg='Autorotation: manage descent rate!';
+        trainerMsgTimer=0.3;
+      }else{
+        trainerMsg='Engine OFF! Glide to pad: '+Math.round(dist)+'m | Alt: '+Math.round(droneY)+'m';
+        trainerMsgTimer=0.3;
+      }
+    }else{
+      trainerMsg='Wait for engine shutdown...';
+      trainerMsgTimer=0.3;
+    }
+  }else if(t.type==='confined'){
+    var dx=droneX-t.tgtX,dz=droneZ-t.tgtZ;
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    if(dist<t.r&&droneY<2){
+      trainerScore++;trainerMsg='CONFINED LANDING!';trainerMsgTimer=2;
+      nextTrainerTask();
+    }else{
+      trainerMsg='Navigate buildings, land on pad: '+Math.round(dist)+'m';
+      trainerMsgTimer=0.3;
+    }
+  }
+}
+function nextTrainerTask(){
+  trainerTask++;
+  if(trainerTask>=TRAINER_TASKS.length){
+    trainerMsg='ALL TASKS COMPLETE! Score: '+trainerScore+'/'+TRAINER_TASKS.length;
+    trainerMsgTimer=5;
+    setTimeout(function(){trainerMode=false;toMenu();},3000);
+  }else{
+    setTimeout(setupTrainerPad,1500);
+  }
+}
+function drawTrainerPads(cx,cy,cz,cyaw,cpitch){
+  for(var i=0;i<trainerPads.length;i++){
+    var p=trainerPads[i];
+    var s=project(p.x,0.1,p.z,cx,cy,cz,cyaw,cpitch);
+    if(!s||s.z>120)continue;
+    var r=Math.max(8,p.r*FOV/s.z);
+    X.strokeStyle=p.col;X.lineWidth=2;
+    X.beginPath();X.arc(s.x,s.y,r,0,Math.PI*2);X.stroke();
+    X.beginPath();X.arc(s.x,s.y,r*0.6,0,Math.PI*2);X.stroke();
+    X.beginPath();X.moveTo(s.x-r,s.y);X.lineTo(s.x+r,s.y);X.stroke();
+    X.beginPath();X.moveTo(s.x,s.y-r);X.lineTo(s.x,s.y+r);X.stroke();
+    X.fillStyle=p.col;X.font='bold 11px monospace';X.textAlign='center';
+    X.fillText(p.label,s.x,s.y-r-8);
+    var t=TRAINER_TASKS[trainerTask];
+    if(t){
+      X.fillStyle='rgba(0,0,0,0.6)';X.fillRect(W/2-200,H*0.15,400,60);
+      X.strokeStyle=p.col;X.lineWidth=1;X.strokeRect(W/2-200,H*0.15,400,60);
+      X.fillStyle='#fff';X.font='bold 13px monospace';X.textAlign='center';
+      X.fillText('TASK '+(trainerTask+1)+'/'+TRAINER_TASKS.length+': '+t.name,W/2,H*0.15+18);
+      X.fillStyle='#aaa';X.font='11px sans-serif';
+      X.fillText(t.desc,W/2,H*0.15+35);
+      if(trainerMsg&&trainerMsgTimer>0){
+        X.fillStyle='rgba(0,0,0,0.7)';X.fillRect(W/2-180,H*0.15+65,360,28);
+        X.fillStyle='#0ff';X.font='bold 12px monospace';
+        X.fillText(trainerMsg,W/2,H*0.15+83);
+      }
+    }
+  }
+  X.fillStyle='#fff';X.font='bold 12px monospace';X.textAlign='left';
+  X.fillText('SCORE: '+trainerScore+'/'+TRAINER_TASKS.length,10,25);
+}
 buildList();buildChampProgress();initOpPanel();
 render();
 })();
