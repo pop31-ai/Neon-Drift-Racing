@@ -1466,9 +1466,17 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
     X.beginPath();X.moveTo(sz*.28,-sz*.04);X.lineTo(sz*.28,sz*.04);X.stroke();
   }
 
-  var rotA=(raceTime*30)%360*Math.PI/180;
-  X.globalAlpha=0.35;X.strokeStyle='#0ff';X.lineWidth=Math.max(1,sz*0.03);
-  X.beginPath();X.ellipse(0,-sz*.05,sz*.06+sz*.4*Math.abs(Math.cos(rotA)),sz*.4*Math.abs(Math.sin(rotA))+sz*.04,0,0,Math.PI*2);X.stroke();
+  var rotorY=-sz*.4;
+  X.strokeStyle='#777';X.lineWidth=Math.max(1,sz*0.015);
+  X.beginPath();X.moveTo(0,-sz*.15);X.lineTo(0,rotorY);X.stroke();
+  X.fillStyle='#888';X.beginPath();X.arc(0,rotorY,sz*.02,0,Math.PI*2);X.fill();
+  var rotA=(raceTime*40)%360*Math.PI/180;
+  var bladeLen=sz*.55;
+  X.globalAlpha=0.45;X.strokeStyle='#0ff';X.lineWidth=Math.max(1.5,sz*0.025);
+  X.beginPath();X.moveTo(-bladeLen*Math.cos(rotA),rotorY-bladeLen*Math.sin(rotA)*0.15);X.lineTo(bladeLen*Math.cos(rotA),rotorY+bladeLen*Math.sin(rotA)*0.15);X.stroke();
+  X.beginPath();X.moveTo(-bladeLen*Math.cos(rotA+Math.PI/2),rotorY-bladeLen*Math.sin(rotA+Math.PI/2)*0.15);X.lineTo(bladeLen*Math.cos(rotA+Math.PI/2),rotorY+bladeLen*Math.sin(rotA+Math.PI/2)*0.15);X.stroke();
+  X.globalAlpha=0.12;X.strokeStyle='#0ff';X.lineWidth=1;
+  X.beginPath();X.ellipse(0,rotorY,bladeLen,bladeLen*0.12,0,0,Math.PI*2);X.stroke();
   X.globalAlpha=1;
 
   X.fillStyle='#f00';X.beginPath();X.arc(sz*.12,sz*.08,sz*.02,0,Math.PI*2);X.fill();
