@@ -1210,7 +1210,7 @@ function updateHeliPhysics(dt){
   if(diff==='easy'){dragH=0.94;grav=7;}
   if(diff==='hard'){dragH=0.98;grav=11;}
 
-  var cyclicF=0,cyclicS=0,pedalYaw=0,collective=0,bst=0;
+  var cyclicF=0,cyclicS=0,pedalYaw=0,targetColl=0,bst=0;
   if(keys['KeyW']||keys['ArrowUp'])cyclicF=-1;
   if(keys['KeyS']||keys['ArrowDown'])cyclicF=1;
   if(keys['KeyA'])cyclicS=-1;
@@ -1219,25 +1219,25 @@ function updateHeliPhysics(dt){
   if(keys['KeyE'])pedalYaw=1;
   if(keys['ArrowLeft'])pedalYaw=1;
   if(keys['ArrowRight'])pedalYaw=-1;
-  if(keys['ShiftLeft']||keys['ShiftRight'])collective=1;
-  if(keys['KeyR'])collective=0.7;
-  if(keys['KeyF'])collective=-0.5;
+  if(keys['ShiftLeft']||keys['ShiftRight'])targetColl=1;
+  else if(keys['KeyR'])targetColl=0.7;
+  else if(keys['KeyF'])targetColl=-0.5;
+  else targetColl=grav/(16/mass);
   if(keys['Space']&&boostFuel>0)bst=1;
 
   cyclicF=Math.max(-1,Math.min(1,cyclicF+(jlAct.a?jlAct.y:0)));
   cyclicS=Math.max(-1,Math.min(1,cyclicS+(jlAct.a?jlAct.x:0)));
   pedalYaw=Math.max(-1,Math.min(1,pedalYaw+(jrAct.a?jrAct.x:0)));
-  collective=Math.max(-1,Math.min(1,collective+(jrAct.a?-jrAct.y:0)));
+  targetColl=Math.max(-1,Math.min(1,targetColl+(jrAct.a?-jrAct.y:0)));
+
+  var collRate=dt*3;
+  collective+=(targetColl-collective)*Math.min(1,collRate);
 
   if(bst>0)boostFuel=Math.max(0,boostFuel-dt*20);
   else boostFuel=Math.min(100,boostFuel+dt*4);
 
   droneYaw+=pedalYaw*0.04*(1/mass);
 
-  var fwdX=Math.sin(camYaw),fwdZ=Math.cos(camYaw);
-  var rX=Math.cos(camYaw),rZ=-Math.sin(camYaw);
-
-  var tiltAngle=dronePitch*0.3;
   var tiltFwdX=Math.sin(droneYaw),tiltFwdZ=Math.cos(droneYaw);
   var tiltRX=Math.cos(droneYaw),tiltRZ=-Math.sin(droneYaw);
 
@@ -1256,8 +1256,8 @@ function updateHeliPhysics(dt){
   droneVY*=dragV;
 
   var tiltAccel=0.12/mass;
-  var tiltVX=tiltFwdX*cyclicF+tiltRX*cyclicS;
-  var tiltVZ=tiltFwdZ*cyclicF+tiltRZ*cyclicS;
+  var tiltVX=tiltFwdX*(-cyclicF)+tiltRX*(-cyclicS);
+  var tiltVZ=tiltFwdZ*(-cyclicF)+tiltRZ*(-cyclicS);
   droneVX+=tiltVX*tiltAccel*liftForce*0.3;
   droneVZ+=tiltVZ*tiltAccel*liftForce*0.3;
 
@@ -1265,17 +1265,20 @@ function updateHeliPhysics(dt){
   droneVX*=dragH*groundDrag;
   droneVZ*=dragH*groundDrag;
 
+  var maxSpd=5*(bst>0?1.5:1);
+  if(speed>maxSpd){droneVX*=maxSpd/speed;droneVZ*=maxSpd/speed;}
+
   droneX+=droneVX;
   droneZ+=droneVZ;
   droneY+=droneVY;
 
-  if(droneY<0.3){droneY=0.3;droneVY=Math.abs(droneVY)*0.1;droneVX*=0.95;droneVZ*=0.95;}
+  if(droneY<0.3){droneY=0.3;droneVY=Math.max(0,droneVY)*0.1;droneVX*=0.95;droneVZ*=0.95;}
   if(droneY>200){droneY=200;droneVY*=-0.2;}
 
   var targetPitch=cyclicF*0.5;
   var targetRoll=cyclicS*0.5-pedalYaw*0.15*speed*0.05;
-  dronePitch+=(targetPitch-dronePitch)*0.08;
-  droneRoll+=(targetRoll-droneRoll)*0.08;
+  dronePitch+=(targetPitch-dronePitch)*0.12;
+  droneRoll+=(targetRoll-droneRoll)*0.12;
   droneVisYaw+=(pedalYaw*0.6-droneVisYaw)*0.15;
 
   if(opSettings.particles){
