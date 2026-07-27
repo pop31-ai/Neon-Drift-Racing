@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horse Golf</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+#gameContainer { position: relative; }
+canvas { display: block; border-radius: 12px; box-shadow: 0 0 40px rgba(0,200,100,0.3); }
+#ui { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; }
+.panel { background: rgba(0,0,0,0.7); color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 14px; backdrop-filter: blur(5px); }
+.panel b { color: #4ade80; }
+#startScreen, #endScreen { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; border-radius: 12px; z-index: 10; }
+#startScreen h1, #endScreen h1 { font-size: 48px; margin-bottom: 10px; }
+#startScreen h1 { color: #4ade80; text-shadow: 0 0 20px #4ade80; }
+.subtitle { color: #aaa; margin-bottom: 30px; font-size: 16px; max-width: 400px; text-align: center; line-height: 1.6; }
+.btn { background: #4ade80; color: #000; border: none; padding: 14px 40px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; pointer-events: all; transition: transform 0.15s, background 0.15s; }
+.btn:hover { background: #22c55e; transform: scale(1.05); }
+#endScreen h1 { color: #facc15; }
+.finalScore { font-size: 60px; color: #4ade80; font-weight: bold; margin: 10px 0; }
+.finalStats { color: #aaa; margin-bottom: 20px; font-size: 14px; line-height: 1.8; }
+#instructions { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.4); font-size: 12px; pointer-events: none; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <div class="panel">🏆 <b id="scoreVal">0</b> pts</div>
+    <div class="panel">🐴 <b id="horseCount">5</b> left</div>
+    <div class="panel">⏱ <b id="timerVal">60</b>s</div>
+    <div class="panel">🍎 <b id="feedCount">3</b></div>
+  </div>
+  <div id="startScreen">
+    <h1>🐴 HORSE GOLF</h1>
+    <div class="subtitle">
+      Загоняй лошадей на поляны!<br>
+      Тяни мышью от лошади и отпусти — как в гольфе.<br>
+      Собирай яблоки 🍎 чтобы кормить и ускорять лошадей.<br>
+      Чем дальше поляна — тем больше очков!<br>
+      У тебя <b>60 секунд</b>!
+    </div>
+    <button class="btn" onclick="startGame()">ИГРАТЬ</button>
+  </div>
+  <div id="endScreen" style="display:none">
+    <h1>ВРЕМЯ ВЫШЛО!</h1>
+    <div class="finalScore" id="finalScore">0</div>
+    <div style="color:#aaa; margin-bottom:10px">очков</div>
+    <div class="finalStats" id="finalStats"></div>
+    <button class="btn" onclick="startGame()">ЗАНОВО</button>
+  </div>
+  <div id="instructions">ЛКМ — тянуть и бросать лошадь &nbsp;|&nbsp; ПКМ — кормить (если есть яблоки)</div>
+</div>
+
+<script>
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+const W = 800, H = 600;
+C.width = W; C.height = H;
+
+let state = 'menu';
+let score = 0, timeLeft = 60, feeds = 3, horses = [], meadows = [], apples = [];
+let dragging = null, dragStart = null, dragEnd = null;
+let timer = null;
+let horseOnMeadow = [false,false,false,false,false];
+let particles = [];
+let dustClouds = [];
+let hoofPrints = [];
+let grassPatches = [];
+let trees = [];
+
+function rnd(a,b) { return Math.random()*(b-a)+a; }
+function dist(a,b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+
+function generateLevel() {
+  meadows = [];
+  apples = [];
+  grassPatches = [];
+  trees = [];
+  dustClouds = [];
+  hoofPrints = [];
+
+  const meadowDefs = [
+    {x:150, y:120, r:40, pts:100, color:'#86efac'},
+    {x:650, y:100, r:35, pts:150, color:'#6ee7b7'},
+    {x:400, y:80, r:30, pts:200, color:'#34d399'},
+    {x:100, y:450, r:38, pts:120, color:'#86efac'},
+    {x:700, y:480, r:32, pts:180, color:'#6ee7b7'},
+    {x:350, y:500, r:28, pts:250, color:'#34d399'},
+    {x:550, y:300, r:25, pts:300, color:'#10b981'},
+  ];
+  meadows = meadowDefs.map(m => ({...m, claimed: 0}));
+
+  for (let i = 0; i < 8; i++) {
+    apples.push({x: rnd(60, W-60), y: rnd(60, H-60), alive: true, bobPhase: rnd(0, Math.PI*2)});
+  }
+
+  for (let i = 0; i < 120; i++) {
+    grassPatches.push({x: rnd(0,W), y: rnd(0,H), size: rnd(3,8), shade: rnd(0.85,1.15)});
+  }
+
+  for (let i = 0; i < 15; i++) {
+    let tx = rnd(30, W-30), ty = rnd(30, H-30);
+    let tooClose = meadows.some(m => dist({x:tx,y:ty}, m) < m.r + 30);
+    if (!tooClose) trees.push({x:tx, y:ty, size: rnd(12,22), sway: rnd(0, Math.PI*2)});
+  }
+}
+
+function spawnHorses() {
+  horses = [];
+  const spots = [{x:400,y:540},{x:360,y:550},{x:440,y:550},{x:320,y:540},{x:480,y:540}];
+  const colors = ['#e74c3c','#3498db','#f39c12','#9b59b6','#1abc9c'];
+  for (let i = 0; i < 5; i++) {
+    horses.push({
+      x: spots[i].x, y: spots[i].y,
+      vx: 0, vy: 0,
+      color: colors[i],
+      speed: 1,
+      onMeadow: false,
+      meadowIdx: -1,
+      fed: false,
+      angle: 0,
+      tail: 0,
+      id: i,
+      // micro-anim props
+      blinkTimer: rnd(60, 200),
+      blinking: false,
+      blinkFrame: 0,
+      breathePhase: rnd(0, Math.PI*2),
+      earPhase: rnd(0, Math.PI*2),
+      earTwitchTimer: rnd(80, 250),
+      earTwitch: 0,
+      manePhase: 0,
+      sweatTimer: 0,
+      sweatDrops: [],
+      headBob: 0,
+      grazePhase: 0,
+      grazing: false,
+      hoofPrints: [],
+      dustClouds: [],
+      emote: null,
+      emoteTimer: 0,
+      lastSpeed: 0,
+      skidTimer: 0,
+      bounceY: 0,
+      bodySquish: 0,
+      mouthOpen: 0,
+      prevX: spots[i].x,
+      prevY: spots[i].y
+    });
+  }
+  horseOnMeadow = [false,false,false,false,false];
+}
+
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('endScreen').style.display = 'none';
+  score = 0; timeLeft = 60; feeds = 3;
+  generateLevel();
+  spawnHorses();
+  state = 'play';
+  updateUI();
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => {
+    if (state !== 'play') return;
+    timeLeft--;
+    document.getElementById('timerVal').textContent = timeLeft;
+    if (timeLeft <= 10) document.getElementById('timerVal').style.color = '#ef4444';
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function endGame() {
+  state = 'end';
+  clearInterval(timer);
+  document.getElementById('endScreen').style.display = 'flex';
+  document.getElementById('finalScore').textContent = score;
+  let landed = horses.filter(h => h.onMeadow).length;
+  document.getElementById('finalStats').innerHTML =
+    `Лошадей на полянах: <b>${landed}/5</b><br>` +
+    `Яблок использовано: <b>${3 - feeds}</b><br>` +
+    `Средняя точность: <b>${landed ? Math.round(score/landed) : 0}</b>`;
+}
+
+function updateUI() {
+  document.getElementById('scoreVal').textContent = score;
+  document.getElementById('horseCount').textContent = horses.filter(h => !h.onMeadow).length;
+  document.getElementById('timerVal').textContent = timeLeft;
+  document.getElementById('timerVal').style.color = timeLeft <= 10 ? '#ef4444' : '#4ade80';
+  document.getElementById('feedCount').textContent = feeds;
+}
+
+function addParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y, vx: rnd(-3,3), vy: rnd(-4,1),
+      life: rnd(20,40), maxLife: 40,
+      color, size: rnd(2,5)
+    });
+  }
+}
+
+function addStars(x, y) {
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x, y, vx: rnd(-2,2), vy: rnd(-3,0),
+      life: rnd(30,50), maxLife: 50,
+      color: '#facc15', size: rnd(3,6), star: true
+    });
+  }
+}
+
+function updateMicroAnims(h) {
+  // blinking
+  h.blinkTimer--;
+  if (h.blinkTimer <= 0 && !h.blinking) {
+    h.blinking = true;
+    h.blinkFrame = 0;
+    h.blinkTimer = rnd(90, 260);
+  }
+  if (h.blinking) {
+    h.blinkFrame++;
+    if (h.blinkFrame > 8) { h.blinking = false; h.blinkFrame = 0; }
+  }
+
+  // breathing
+  h.breathePhase += 0.04;
+
+  // ear twitch
+  h.earTwitchTimer--;
+  if (h.earTwitchTimer <= 0) {
+    h.earTwitch = 1;
+    h.earTwitchTimer = rnd(60, 200);
+  }
+  if (h.earTwitch > 0) h.earTwitch *= 0.85;
+  if (h.earTwitch < 0.05) h.earTwitch = 0;
+  h.earPhase += 0.03;
+
+  // mane flow
+  let spd = Math.hypot(h.vx, h.vy);
+  h.manePhase += spd * 0.15;
+
+  // head bob
+  if (spd > 1) {
+    h.headBob += spd * 0.2;
+  } else {
+    h.headBob *= 0.9;
+  }
+
+  // body squish on fast stop
+  h.bodySquish *= 0.9;
+
+  // bounce
+  if (spd > 2) {
+    h.bounceY = Math.sin(Date.now() * 0.02) * Math.min(spd * 0.5, 3);
+  } else {
+    h.bounceY *= 0.85;
+  }
+
+  // sweat when fast
+  if (spd > 5) {
+    h.sweatTimer++;
+    if (h.sweatTimer % 8 === 0) {
+      h.sweatDrops.push({ x: h.x + rnd(-5,5), y: h.y - 10, vy: -1.5, life: 30 });
+    }
+  }
+  h.sweatDrops = h.sweatDrops.filter(s => { s.y += s.vy; s.vy += 0.08; s.life--; return s.life > 0; });
+
+  // dust clouds when moving fast
+  if (spd > 3) {
+    h.dustClouds.push({ x: h.prevX + rnd(-4,4), y: h.prevY + 10, r: rnd(3,7), life: 25, maxLife: 25 });
+  }
+
+  // hoof prints when moving
+  if (spd > 1.5) {
+    if (Math.random() < 0.3) {
+      h.hoofPrints.push({ x: h.x + rnd(-3,3), y: h.y + rnd(-2,2), life: 120, alpha: 0.4 });
+    }
+  }
+
+  // skid particles
+  if (h.skidTimer > 0) {
+    h.skidTimer--;
+    if (Math.random() < 0.5) {
+      addParticles(h.x, h.y, '#c8b560', 1);
+    }
+  }
+
+  // emotes
+  if (h.emoteTimer > 0) {
+    h.emoteTimer--;
+    if (h.emoteTimer <= 0) h.emote = null;
+  }
+
+  // grazing on meadow
+  if (h.onMeadow) {
+    h.grazing = true;
+    h.grazePhase += 0.03;
+  }
+
+  h.prevX = h.x;
+  h.prevY = h.y;
+}
+
+function updateDustClouds() {
+  dustClouds = dustClouds.filter(d => {
+    d.r += 0.15;
+    d.life--;
+    return d.life > 0;
+  });
+  hoofPrints = hoofPrints.filter(h => {
+    h.life--;
+    h.alpha *= 0.998;
+    return h.life > 0;
+  });
+}
+
+function update() {
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.1;
+    p.life--;
+    return p.life > 0;
+  });
+
+  updateDustClouds();
+
+  horses.forEach(h => {
+    if (h.onMeadow) {
+      updateMicroAnims(h);
+      // occasional heart on meadow
+      if (Math.random() < 0.003 && !h.emote) {
+        h.emote = '❤️'; h.emoteTimer = 60;
+      }
+      return;
+    }
+
+    let prevSpd = Math.hypot(h.vx, h.vy);
+
+    h.x += h.vx; h.y += h.vy;
+    h.vx *= 0.97; h.vy *= 0.97;
+    h.angle = Math.atan2(h.vy, h.vx);
+    h.tail += 0.15;
+
+    if (h.x < 15) { h.x = 15; h.vx *= -0.5; h.skidTimer = 10; }
+    if (h.x > W-15) { h.x = W-15; h.vx *= -0.5; h.skidTimer = 10; }
+    if (h.y < 15) { h.y = 15; h.vy *= -0.5; h.skidTimer = 10; }
+    if (h.y > H-15) { h.y = H-15; h.vy *= -0.5; h.skidTimer = 10; }
+
+    let curSpd = Math.hypot(h.vx, h.vy);
+
+    // skid on fast decel
+    if (prevSpd > 4 && curSpd < prevSpd * 0.7) {
+      h.skidTimer = 15;
+      h.bodySquish = 0.3;
+    }
+
+    if (curSpd < 0.3) { h.vx = 0; h.vy = 0; }
+
+    // collision between horses
+    horses.forEach(other => {
+      if (other === h || other.onMeadow) return;
+      let d = dist(h, other);
+      if (d < 22 && d > 0) {
+        let pushAngle = Math.atan2(h.y - other.y, h.x - other.x);
+        h.vx += Math.cos(pushAngle) * 0.8;
+        h.vy += Math.sin(pushAngle) * 0.8;
+        other.vx -= Math.cos(pushAngle) * 0.8;
+        other.vy -= Math.sin(pushAngle) * 0.8;
+      }
+    });
+
+    apples.forEach(a => {
+      if (a.alive && dist(h, a) < 20) {
+        a.alive = false;
+        h.speed = 1.5;
+        h.emote = '🍎'; h.emoteTimer = 50;
+        addParticles(a.x, a.y, '#ef4444', 6);
+      }
+    });
+
+    meadows.forEach((m, mi) => {
+      if (!h.onMeadow && dist(h, m) < m.r) {
+        h.onMeadow = true;
+        h.meadowIdx = mi;
+        h.vx = 0; h.vy = 0;
+        horseOnMeadow[mi] = true;
+        m.claimed++;
+        let pts = m.pts * (h.fed ? 1.5 : 1);
+        score += Math.round(pts);
+        h.emote = '⭐'; h.emoteTimer = 90;
+        addStars(m.x, m.y);
+        addParticles(m.x, m.y, '#facc15', 10);
+        updateUI();
+      }
+    });
+
+    updateMicroAnims(h);
+  });
+}
+
+function draw() {
+  // grass bg
+  ctx.fillStyle = '#2d5a27';
+  ctx.fillRect(0, 0, W, H);
+
+  // grass patches
+  grassPatches.forEach(g => {
+    let sway = Math.sin(Date.now() * 0.002 + g.x * 0.01) * 1.5;
+    ctx.fillStyle = `rgba(60,${Math.round(130*g.shade)},40,0.6)`;
+    ctx.beginPath();
+    ctx.arc(g.x + sway, g.y, g.size, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // small flowers
+  let flowerT = Date.now() * 0.001;
+  for (let i = 0; i < 20; i++) {
+    let fx = (i * 137.5 + 50) % W;
+    let fy = (i * 97.3 + 30) % H;
+    let fs = 2 + Math.sin(flowerT + i) * 0.5;
+    ctx.fillStyle = ['#f9a8d4','#fde68a','#c4b5fd','#fca5a5','#93c5fd'][i % 5];
+    ctx.beginPath(); ctx.arc(fx, fy, fs, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath(); ctx.arc(fx, fy, fs * 0.4, 0, Math.PI*2); ctx.fill();
+  }
+
+  // trees (behind)
+  trees.forEach(t => {
+    t.sway += 0.02;
+    let sx = Math.sin(t.sway) * 2;
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(t.x-3, t.y, 6, t.size*0.6);
+    ctx.fillStyle = '#2e7d32';
+    ctx.beginPath();
+    ctx.arc(t.x+sx, t.y-t.size*0.2, t.size, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#1b5e20';
+    ctx.beginPath();
+    ctx.arc(t.x+sx+4, t.y-t.size*0.3, t.size*0.7, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // meadows
+  meadows.forEach(m => {
+    let pulse = Math.sin(Date.now()*0.003) * 0.15 + 0.85;
+    // outer glow
+    ctx.fillStyle = `rgba(74,222,128,${0.15*pulse})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r+12, 0, Math.PI*2); ctx.fill();
+    // main
+    ctx.fillStyle = m.color;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill();
+    // inner
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.arc(m.x-5, m.y-5, m.r*0.5, 0, Math.PI*2); ctx.fill();
+    // label
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${m.pts}pts`, m.x, m.y+5);
+    if (m.claimed > 0) {
+      ctx.fillStyle = '#facc15';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(`x${m.claimed}`, m.x, m.y+20);
+    }
+  });
+
+  // apples
+  apples.forEach(a => {
+    if (!a.alive) return;
+    a.bobPhase += 0.05;
+    let by = Math.sin(a.bobPhase) * 3;
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🍎', a.x, a.y + by);
+  });
+
+  // horses
+  horses.forEach(h => {
+    let spd = Math.hypot(h.vx, h.vy);
+
+    // --- speed lines ---
+    if (spd > 6) {
+      let lineAngle = h.angle + Math.PI;
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        let lx = h.x + Math.cos(lineAngle) * (15 + i * 8) + rnd(-3,3);
+        let ly = h.y + Math.sin(lineAngle) * (15 + i * 8) + rnd(-3,3);
+        let len = spd * 2 + rnd(-5,5);
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.lineTo(lx + Math.cos(lineAngle) * len, ly + Math.sin(lineAngle) * len);
+        ctx.stroke();
+      }
+    }
+
+    // --- hoof prints ---
+    h.hoofPrints.forEach(hp => {
+      ctx.globalAlpha = hp.alpha * (hp.life / 120);
+      ctx.fillStyle = '#1a3a14';
+      ctx.beginPath();
+      ctx.ellipse(hp.x, hp.y, 3, 2, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+
+    // --- dust clouds ---
+    h.dustClouds.forEach(d => {
+      let a = (d.life / d.maxLife) * 0.35;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#c8b560';
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    h.dustClouds = h.dustClouds.filter(d => d.life-- > 0);
+
+    ctx.save();
+    ctx.translate(h.x, h.y + h.bounceY);
+
+    let moveDir = spd > 0.5 ? h.angle : -Math.PI/2;
+
+    // --- shadow ---
+    let shadowScale = 1 - Math.abs(h.bounceY) * 0.08;
+    ctx.save();
+    ctx.scale(1, shadowScale);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(2, 8 - h.bounceY * 0.3, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    ctx.rotate(moveDir + Math.PI/2);
+
+    // breathing scale
+    let breathe = 1 + Math.sin(h.breathePhase) * 0.025;
+    let squishX = 1 + h.bodySquish;
+    let squishY = 1 - h.bodySquish * 0.5;
+    ctx.scale(breathe * squishX, (1/breathe) * squishY);
+
+    let baseColor = h.onMeadow ? '#22c55e' : h.color;
+    let darkColor = h.onMeadow ? '#15803d' : '#333';
+
+    // --- mane (behind body) ---
+    ctx.fillStyle = darkColor;
+    for (let i = 0; i < 5; i++) {
+      let mx = -8 + i * 4;
+      let my = -12 + i * 2;
+      let mWave = Math.sin(h.manePhase + i * 0.8) * (1 + spd * 0.3);
+      ctx.beginPath();
+      ctx.ellipse(mx + mWave, my, 2.5, 5, mWave * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- body ---
+    ctx.fillStyle = baseColor;
+    ctx.beginPath(); ctx.ellipse(0, 0, 10, 16, 0, 0, Math.PI*2); ctx.fill();
+    // body highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.ellipse(-3, -4, 4, 8, -0.2, 0, Math.PI*2); ctx.fill();
+
+    // --- legs with gallop animation ---
+    let legSpeed = Math.min(spd * 0.3, 1);
+    let legAnim = Math.sin(h.tail * 2) * (2 + legSpeed * 4);
+    let legAnim2 = Math.sin(h.tail * 2 + Math.PI) * (2 + legSpeed * 4);
+    ctx.strokeStyle = darkColor;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    // back legs
+    ctx.beginPath(); ctx.moveTo(-6, 10); ctx.lineTo(-6 + legAnim, 22); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, 10); ctx.lineTo(6 - legAnim, 22); ctx.stroke();
+    // front legs
+    ctx.beginPath(); ctx.moveTo(-5, -8); ctx.lineTo(-5 - legAnim2, -18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(5, -8); ctx.lineTo(5 + legAnim2, -18); ctx.stroke();
+    // hooves
+    ctx.fillStyle = '#333';
+    [[-6 + legAnim, 22], [6 - legAnim, 22], [-5 - legAnim2, -18], [5 + legAnim2, -18]].forEach(([hx, hy]) => {
+      ctx.beginPath(); ctx.arc(hx, hy, 2.5, 0, Math.PI*2); ctx.fill();
+    });
+
+    // --- head ---
+    let headBobOffset = Math.sin(h.headBob) * 1.5;
+    let grazeOffset = h.grazing ? 4 : 0;
+    ctx.fillStyle = baseColor;
+    ctx.beginPath(); ctx.ellipse(0, -18 + headBobOffset + grazeOffset, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+
+    // --- muzzle ---
+    ctx.fillStyle = h.onMeadow ? '#a3e635' : '#f5d0c5';
+    ctx.beginPath(); ctx.ellipse(0, -22 + headBobOffset + grazeOffset, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+
+    // --- mouth ---
+    if (h.grazing || h.mouthOpen > 0) {
+      let mouthVal = h.grazing ? Math.sin(h.grazePhase * 3) * 0.5 + 0.5 : h.mouthOpen;
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, -21 + headBobOffset + grazeOffset, 2, 0, Math.PI * mouthVal);
+      ctx.stroke();
+    }
+
+    // --- ears with twitch ---
+    ctx.fillStyle = darkColor;
+    let earTwitchL = Math.sin(h.earPhase) * 3 + h.earTwitch * Math.sin(Date.now() * 0.1) * 5;
+    let earTwitchR = Math.sin(h.earPhase + 1) * 3 - h.earTwitch * Math.sin(Date.now() * 0.1) * 5;
+    ctx.beginPath();
+    ctx.moveTo(-4, -24 + headBobOffset + grazeOffset);
+    ctx.lineTo(-7 + earTwitchL, -32 + headBobOffset + grazeOffset);
+    ctx.lineTo(-1, -26 + headBobOffset + grazeOffset);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(4, -24 + headBobOffset + grazeOffset);
+    ctx.lineTo(7 + earTwitchR, -32 + headBobOffset + grazeOffset);
+    ctx.lineTo(1, -26 + headBobOffset + grazeOffset);
+    ctx.fill();
+    // inner ear
+    ctx.fillStyle = '#e8a0a0';
+    ctx.beginPath();
+    ctx.moveTo(-3, -25 + headBobOffset + grazeOffset);
+    ctx.lineTo(-6 + earTwitchL, -30 + headBobOffset + grazeOffset);
+    ctx.lineTo(-1.5, -26 + headBobOffset + grazeOffset);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(3, -25 + headBobOffset + grazeOffset);
+    ctx.lineTo(6 + earTwitchR, -30 + headBobOffset + grazeOffset);
+    ctx.lineTo(1.5, -26 + headBobOffset + grazeOffset);
+    ctx.fill();
+
+    // --- eyes with blink ---
+    let eyeY = -18 + headBobOffset + grazeOffset;
+    let blinkSquash = h.blinking ? Math.max(0.1, 1 - h.blinkFrame / 4) : 1;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-3, eyeY, 2, 2 * blinkSquash, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3, eyeY, 2, 2 * blinkSquash, 0, 0, Math.PI*2); ctx.fill();
+    if (!h.blinking) {
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(-3, eyeY, 1, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, eyeY, 1, 0, Math.PI*2); ctx.fill();
+      // eye shine
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.arc(-2.5, eyeY - 0.8, 0.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3.5, eyeY - 0.8, 0.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // --- tail with physics ---
+    ctx.strokeStyle = darkColor;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 14);
+    let tw1 = Math.sin(h.tail) * (4 + spd * 0.5);
+    let tw2 = Math.sin(h.tail + 0.5) * (6 + spd * 0.8);
+    let tw3 = Math.sin(h.tail + 1) * (5 + spd * 0.6);
+    ctx.bezierCurveTo(tw1, 19, tw2, 24, tw3, 30);
+    ctx.stroke();
+    // tail tip hair
+    if (spd > 2) {
+      for (let i = 0; i < 3; i++) {
+        let tx = tw3 + Math.sin(h.tail + i) * 3;
+        let ty = 30 + i * 2;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx + Math.sin(h.tail + i * 2) * 4, ty + 3);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+
+    // --- sweat drops ---
+    h.sweatDrops.forEach(s => {
+      let a = s.life / 30;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#87ceeb';
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, 1.5, 2.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+
+    // --- fed sparkle ring ---
+    if (h.fed && !h.onMeadow) {
+      let ringPhase = Date.now() * 0.005;
+      for (let i = 0; i < 6; i++) {
+        let ra = ringPhase + i * (Math.PI * 2 / 6);
+        let rx = h.x + Math.cos(ra) * 18;
+        let ry = h.y + Math.sin(ra) * 18 - 5;
+        ctx.globalAlpha = 0.5 + Math.sin(ra + Date.now() * 0.01) * 0.3;
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(rx, ry, 1.5, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // --- emote bubble ---
+    if (h.emote) {
+      let ey = h.y - 35 + Math.sin(Date.now() * 0.005) * 3;
+      let ea = Math.min(1, h.emoteTimer / 15);
+      ctx.globalAlpha = ea;
+      // bubble bg
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(h.x, ey, 12, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // tail
+      ctx.beginPath();
+      ctx.moveTo(h.x - 3, ey + 11);
+      ctx.lineTo(h.x, ey + 16);
+      ctx.lineTo(h.x + 3, ey + 11);
+      ctx.fill();
+      // emoji
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(h.emote, h.x, ey + 5);
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // particles
+  particles.forEach(p => {
+    let alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    if (p.star) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Date.now()*0.01);
+      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  });
+
+  // drag line
+  if (dragging && dragStart && dragEnd) {
+    let h = dragging;
+    let dx = dragStart.x - dragEnd.x;
+    let dy = dragStart.y - dragEnd.y;
+    let power = Math.min(Math.hypot(dx, dy), 150);
+    let angle = Math.atan2(dy, dx);
+
+    // power line
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath();
+    ctx.moveTo(h.x, h.y);
+    ctx.lineTo(h.x + Math.cos(angle)*power, h.y + Math.sin(angle)*power);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // arrow head
+    let ax = h.x + Math.cos(angle)*power;
+    let ay = h.y + Math.sin(angle)*power;
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.arc(ax, ay, 5, 0, Math.PI*2);
+    ctx.fill();
+
+    // power bar
+    let barW = 60, barH = 8;
+    let barX = h.x - barW/2, barY = h.y + 25;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(barX-1, barY-1, barW+2, barH+2);
+    let pct = power / 150;
+    let col = pct < 0.5 ? '#4ade80' : pct < 0.8 ? '#facc15' : '#ef4444';
+    ctx.fillStyle = col;
+    ctx.fillRect(barX, barY, barW * pct, barH);
+  }
+
+  // selected horse glow
+  if (dragging) {
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(dragging.x, dragging.y, 22, 0, Math.PI*2);
+    ctx.stroke();
+  }
+}
+
+function getHorseAt(mx, my) {
+  for (let h of horses) {
+    if (!h.onMeadow && dist({x:mx,y:my}, h) < 25) return h;
+  }
+  return null;
+}
+
+C.addEventListener('mousedown', e => {
+  if (state !== 'play') return;
+  let rect = C.getBoundingClientRect();
+  let mx = (e.clientX - rect.left) * (W / rect.width);
+  let my = (e.clientY - rect.top) * (H / rect.height);
+
+  if (e.button === 2) {
+    // right click = feed nearest moving horse
+    e.preventDefault();
+    if (feeds > 0) {
+      let nearest = null, nd = Infinity;
+      horses.forEach(h => {
+        if (!h.onMeadow && !h.fed) {
+          let d = dist({x:mx,y:my}, h);
+          if (d < nd) { nd = d; nearest = h; }
+        }
+      });
+      if (nearest && nd < 80) {
+        nearest.fed = true;
+        nearest.speed = 1.8;
+        feeds--;
+        addParticles(nearest.x, nearest.y, '#ef4444', 8);
+        updateUI();
+      }
+    }
+    return;
+  }
+
+  let h = getHorseAt(mx, my);
+  if (h) {
+    dragging = h;
+    dragStart = {x: mx, y: my};
+    dragEnd = {x: mx, y: my};
+  }
+});
+
+C.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  let rect = C.getBoundingClientRect();
+  dragEnd = {
+    x: (e.clientX - rect.left) * (W / rect.width),
+    y: (e.clientY - rect.top) * (H / rect.height)
+  };
+});
+
+C.addEventListener('mouseup', e => {
+  if (!dragging || !dragStart || !dragEnd) { dragging = null; return; }
+  let dx = dragStart.x - dragEnd.x;
+  let dy = dragStart.y - dragEnd.y;
+  let power = Math.min(Math.hypot(dx, dy), 150) / 150;
+  let angle = Math.atan2(dy, dx);
+  let speed = power * 12 * dragging.speed;
+
+  dragging.vx = Math.cos(angle) * speed;
+  dragging.vy = Math.sin(angle) * speed;
+
+  // launch effects
+  addParticles(dragging.x, dragging.y, '#fff', 4);
+  dragging.skidTimer = 20;
+  dragging.bodySquish = 0.4;
+  for (let i = 0; i < 5; i++) {
+    dustClouds.push({
+      x: dragging.x + rnd(-8,8),
+      y: dragging.y + 8,
+      r: rnd(4,9),
+      life: 30,
+      maxLife: 30
+    });
+  }
+  dragging = null;
+  dragStart = null;
+  dragEnd = null;
+});
+
+C.addEventListener('contextmenu', e => e.preventDefault());
+
+function loop() {
+  if (state === 'play') {
+    update();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
