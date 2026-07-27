@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html><head><title>Heli Physics Tests v2</title><style>
+body{background:#111;color:#0f0;font:13px monospace;margin:20px}
+.pass{color:#0f0}.fail{color:#f00;font-weight:bold}.warn{color:#ff0}
+h3{color:#0ff;border-bottom:1px solid #333;padding-bottom:4px}
+</style></head><body>
+<h2>Heli Physics Test Suite v2</h2>
+<div id="R"></div>
+<script>
+var R=document.getElementById('R');
+var P=0,F=0,W=0;
+function log(c,h){R.innerHTML+='<div class="'+c+'">'+h+'</div>';}
+function ok(n,c,d){if(c){P++;log('pass','PASS: '+n);}else{F++;log('fail','FAIL: '+n+(d?' — '+d:''));}}
+function warn(n,c,d){if(!c){W++;log('warn','WARN: '+n+(d?' — '+d:''));}}
+
+var droneX,droneY,droneZ,droneYaw,droneVX,droneVY,droneVZ;
+var dronePitch,droneRoll,droneVisYaw;
+var collective,boostFuel,paused,heliType,diff;
+var keys,jlAct,jrAct,opSettings,particles;
+
+function updateHeliPhysics(dt){
+  if(paused)return;
+  var mass=1.0,dragH=0.96,dragV=0.93,grav=9.8;
+  if(heliType===2){mass=1.8;dragH=0.97;}
+  if(heliType===3){mass=1.2;dragH=0.95;}
+  if(heliType===4){mass=0.8;dragH=0.94;}
+  if(heliType===5){mass=2.2;dragH=0.98;}
+  if(heliType===6){mass=0.7;dragH=0.93;}
+  if(heliType===7){mass=1.3;dragH=0.96;}
+  if(diff==='easy'){dragH=0.94;grav=7;}
+  if(diff==='hard'){dragH=0.98;grav=11;}
+
+  var cyclicF=0,cyclicS=0,pedalYaw=0,targetColl=0,bst=0;
+  if(keys['KeyW']||keys['ArrowUp'])cyclicF=-1;
+  if(keys['KeyS']||keys['ArrowDown'])cyclicF=1;
+  if(keys['KeyA'])cyclicS=-1;
+  if(keys['KeyD'])cyclicS=1;
+  if(keys['KeyQ'])pedalYaw=-1;
+  if(keys['KeyE'])pedalYaw=1;
+  if(keys['ArrowLeft'])pedalYaw=1;
+  if(keys['ArrowRight'])pedalYaw=-1;
+  if(keys['ShiftLeft']||keys['ShiftRight'])targetColl=1;
+  else if(keys['KeyR'])targetColl=0.7;
+  else if(keys['KeyF'])targetColl=-0.5;
+  else{
+    var ge=1.0;
+    if(droneY<8)ge=1.0+(8-droneY)*0.05;
+    targetColl=Math.min(1,grav*mass/(16*ge));
+  }
+  if(keys['Space']&&boostFuel>0)bst=1;
+
+  cyclicF=Math.max(-1,Math.min(1,cyclicF+(jlAct.a?jlAct.y:0)));
+  cyclicS=Math.max(-1,Math.min(1,cyclicS+(jlAct.a?jlAct.x:0)));
+  pedalYaw=Math.max(-1,Math.min(1,pedalYaw+(jrAct.a?jrAct.x:0)));
+  targetColl=Math.max(-1,Math.min(1,targetColl+(jrAct.a?-jrAct.y:0)));
+
+  var collRate=dt*3;
+  collective+=(targetColl-collective)*Math.min(1,collRate);
+
+  if(bst>0)boostFuel=Math.max(0,boostFuel-dt*20);
+  else boostFuel=Math.min(100,boostFuel+dt*4);
+
+  droneYaw+=pedalYaw*0.04*(1/mass);
+
+  var tiltFwdX=Math.sin(droneYaw),tiltFwdZ=Math.cos(droneYaw);
+  var tiltRX=Math.cos(droneYaw),tiltRZ=-Math.sin(droneYaw);
+
+  var liftForce=collective*16/mass;
+  if(bst>0)liftForce*=1.4;
+  var speed=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
+
+  var transLift=1.0+Math.min(speed*0.15,0.5);
+  liftForce*=transLift;
+
+  var gEffect=1.0;
+  if(droneY<8)gEffect=1.0+(8-droneY)*0.05;
+  liftForce*=gEffect;
+
+  droneVY+=(-grav+liftForce)*dt;
+  droneVY*=dragV;
+
+  var tiltAccel=0.12/mass;
+  var tiltVX=tiltFwdX*(-cyclicF)+tiltRX*cyclicS;
+  var tiltVZ=tiltFwdZ*(-cyclicF)+tiltRZ*cyclicS;
+  droneVX+=tiltVX*tiltAccel*liftForce*0.3;
+  droneVZ+=tiltVZ*tiltAccel*liftForce*0.3;
+
+  var groundDrag=droneY<3?0.92:1.0;
+  droneVX*=dragH*groundDrag;
+  droneVZ*=dragH*groundDrag;
+
+  droneX+=droneVX;
+  droneZ+=droneVZ;
+  droneY+=droneVY;
+
+  var maxSpd=5*(bst>0?1.5:1);
+  var spdNow=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
+  if(spdNow>maxSpd){var sc=maxSpd/spdNow;droneVX*=sc;droneVZ*=sc;}
+
+  if(droneY<0.3){droneY=0.3;droneVY=Math.max(0,droneVY)*0.1;droneVX*=0.95;droneVZ*=0.95;}
+  if(droneY>200){droneY=200;droneVY*=-0.2;}
+
+  var targetPitch=cyclicF*0.5;
+  var targetRoll=cyclicS*0.5-pedalYaw*0.15*speed*0.05;
+  dronePitch+=(targetPitch-dronePitch)*0.12;
+  droneRoll+=(targetRoll-droneRoll)*0.12;
+  droneVisYaw+=(pedalYaw*0.6-droneVisYaw)*0.15;
+}
+
+function reset(o){
+  droneX=0;droneY=10;droneZ=0;droneYaw=0;
+  droneVX=0;droneVY=0;droneVZ=0;
+  dronePitch=0;droneRoll=0;droneVisYaw=0;
+  collective=0;boostFuel=100;paused=false;
+  heliType=0;diff='normal';
+  keys={};jlAct={a:false,x:0,y:0};jrAct={a:false,x:0,y:0};
+  particles=[];opSettings={particles:false};
+  for(var k in o)window[k]=o[k];
+}
+function sim(n){for(var i=0;i<n;i++)updateHeliPhysics(1/60);}
+
+// =============================================
+R.innerHTML+='<h3>1. Controls Direction</h3>';
+ok('W=FORWARD (Z+)',function(){reset();keys['KeyW']=true;sim(60);return droneZ>0.01;}(),'Z='+droneZ.toFixed(4));
+ok('S=BACKWARD (Z-)',function(){reset();keys['KeyS']=true;sim(60);return droneZ<-0.01;}(),'Z='+droneZ.toFixed(4));
+ok('A=LEFT (X-)',function(){reset();keys['KeyA']=true;sim(60);return droneX<-0.01;}(),'X='+droneX.toFixed(4));
+ok('D=RIGHT (X+)',function(){reset();keys['KeyD']=true;sim(60);return droneX>0.01;}(),'X='+droneX.toFixed(4));
+ok('W+yaw90=X+',function(){reset({droneYaw:Math.PI/2});keys['KeyW']=true;sim(60);return droneX>0.01;}(),'X='+droneX.toFixed(4));
+ok('W+yaw180=Z-',function(){reset({droneYaw:Math.PI});keys['KeyW']=true;sim(60);return droneZ<-0.01;}(),'Z='+droneZ.toFixed(4));
+ok('W+yaw-90=X-',function(){reset({droneYaw:-Math.PI/2});keys['KeyW']=true;sim(60);return droneX<-0.01;}(),'X='+droneX.toFixed(4));
+ok('Q=YAW LEFT',function(){reset();keys['KeyQ']=true;sim(30);return droneYaw<-0.01;}(),'yaw='+droneYaw.toFixed(4));
+ok('E=YAW RIGHT',function(){reset();keys['KeyE']=true;sim(30);return droneYaw>0.01;}(),'yaw='+droneYaw.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>2. Collective / Lift</h3>';
+ok('Shift=CLIMB',function(){reset({droneY:10});keys['ShiftLeft']=true;sim(60);return droneY>10;}(),'Y='+droneY.toFixed(4));
+ok('F=DESCEND',function(){reset({droneY:10,collective:1});keys['KeyF']=true;sim(60);return droneY<10;}(),'Y='+droneY.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>3. Auto-Hover</h3>';
+ok('Hover Y=15 stable 2s',function(){reset({droneY:15,collective:9.8/(16/1)});sim(120);return Math.abs(droneY-15)<2;}(),'Y='+droneY.toFixed(4));
+ok('Hover Y=15 stable 5s',function(){reset({droneY:15,collective:9.8/(16/1)});sim(300);return Math.abs(droneY-15)<3;}(),'Y='+droneY.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>4. Smooth Collective</h3>';
+ok('No jump frame 1',function(){reset({collective:0});keys['ShiftLeft']=true;sim(1);return collective<0.1;}(),'coll='+collective.toFixed(4));
+ok('Reaches ~1.0 in 2s',function(){reset({collective:0});keys['ShiftLeft']=true;sim(120);return Math.abs(collective-1.0)<0.05;}(),'coll='+collective.toFixed(4));
+ok('Returns to hover',function(){reset({collective:1});keys={};sim(120);var ht=9.8/(16/1);return Math.abs(collective-ht)<0.15;}(),'coll='+collective.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>5. Speed Cap</h3>';
+ok('No boost <= 5.05',function(){reset();keys['KeyW']=true;keys['ShiftLeft']=true;sim(300);var s=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);return s<=5.05;}(),'spd='+Math.sqrt(droneVX*droneVX+droneVZ*droneVZ).toFixed(4));
+ok('Boost <= 7.55',function(){reset({boostFuel:100});keys['KeyW']=true;keys['ShiftLeft']=true;keys['Space']=true;sim(300);var s=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);return s<=7.55;}(),'spd='+Math.sqrt(droneVX*droneVX+droneVZ*droneVZ).toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>6. Ground Collision</h3>';
+ok('Y>=0.3',function(){reset({droneY:0.5,droneVY:-10});sim(5);return droneY>=0.29;}(),'Y='+droneY.toFixed(4));
+ok('VY clamped',function(){reset({droneY:0.5,droneVY:-10});sim(5);return droneVY>=-1;}(),'VY='+droneVY.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>7. Pitch & Roll</h3>';
+ok('W=nose down',function(){reset();keys['KeyW']=true;sim(30);return dronePitch<-0.01;}(),'pitch='+dronePitch.toFixed(4));
+ok('S=nose up',function(){reset();keys['KeyS']=true;sim(30);return dronePitch>0.01;}(),'pitch='+dronePitch.toFixed(4));
+ok('A=bank left',function(){reset();keys['KeyA']=true;sim(30);return droneRoll<-0.01;}(),'roll='+droneRoll.toFixed(4));
+ok('D=bank right',function(){reset();keys['KeyD']=true;sim(30);return droneRoll>0.01;}(),'roll='+droneRoll.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>8. Ground Stability</h3>';
+ok('On ground stays (10s)',function(){reset({droneY:0.3,collective:0});sim(600);return droneY<2;}(),'Y='+droneY.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>9. No Fly-Away</h3>';
+ok('Altitude 10s no input',function(){reset({droneY:20,collective:9.8/16});sim(600);return droneY<30;}(),'Y='+droneY.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>10. Difficulty</h3>';
+ok('EASY hover',function(){reset({diff:'easy',droneY:15,collective:0});sim(120);var e=7/(16/1);return Math.abs(collective-e)<0.15;}(),'coll='+collective.toFixed(4));
+ok('HARD hover',function(){reset({diff:'hard',droneY:15,collective:0});sim(120);var h=11/(16/1);return Math.abs(collective-h)<0.25;}(),'coll='+collective.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>11. Force Scaling</h3>';
+ok('More collective = more horizontal accel',function(){
+  reset();keys['KeyW']=true;sim(10);var lowZ=droneZ;
+  reset();keys['KeyW']=true;keys['ShiftLeft']=true;sim(10);var highZ=droneZ;
+  return highZ>lowZ;
+}(),'low='+droneZ.toFixed(4));
+
+// =============================================
+R.innerHTML+='<h3>12. Boost Fuel</h3>';
+ok('Drains',function(){reset({boostFuel:100});keys['Space']=true;sim(100);return boostFuel<100;}(),'fuel='+boostFuel.toFixed(1));
+ok('Regens',function(){reset({boostFuel:0});sim(100);return boostFuel>0;}(),'fuel='+boostFuel.toFixed(1));
+
+// =============================================
+R.innerHTML+='<hr><h3>SUMMARY: <span class="'+(F?'fail':'pass')+'">'+P+' PASS / '+F+' FAIL / '+W+' WARN</span></h3>';
+</script></body></html>

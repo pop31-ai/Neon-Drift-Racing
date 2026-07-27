@@ -1222,7 +1222,11 @@ function updateHeliPhysics(dt){
   if(keys['ShiftLeft']||keys['ShiftRight'])targetColl=1;
   else if(keys['KeyR'])targetColl=0.7;
   else if(keys['KeyF'])targetColl=-0.5;
-  else targetColl=grav/(16/mass);
+  else{
+    var ge=1.0;
+    if(droneY<8)ge=1.0+(8-droneY)*0.05;
+    targetColl=Math.min(1,grav*mass/(16*ge));
+  }
   if(keys['Space']&&boostFuel>0)bst=1;
 
   cyclicF=Math.max(-1,Math.min(1,cyclicF+(jlAct.a?jlAct.y:0)));
@@ -1256,8 +1260,8 @@ function updateHeliPhysics(dt){
   droneVY*=dragV;
 
   var tiltAccel=0.12/mass;
-  var tiltVX=tiltFwdX*(-cyclicF)+tiltRX*(-cyclicS);
-  var tiltVZ=tiltFwdZ*(-cyclicF)+tiltRZ*(-cyclicS);
+  var tiltVX=tiltFwdX*(-cyclicF)+tiltRX*cyclicS;
+  var tiltVZ=tiltFwdZ*(-cyclicF)+tiltRZ*cyclicS;
   droneVX+=tiltVX*tiltAccel*liftForce*0.3;
   droneVZ+=tiltVZ*tiltAccel*liftForce*0.3;
 
@@ -1265,12 +1269,13 @@ function updateHeliPhysics(dt){
   droneVX*=dragH*groundDrag;
   droneVZ*=dragH*groundDrag;
 
-  var maxSpd=5*(bst>0?1.5:1);
-  if(speed>maxSpd){droneVX*=maxSpd/speed;droneVZ*=maxSpd/speed;}
-
   droneX+=droneVX;
   droneZ+=droneVZ;
   droneY+=droneVY;
+
+  var maxSpd=5*(bst>0?1.5:1);
+  var spdNow=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
+  if(spdNow>maxSpd){var sc=maxSpd/spdNow;droneVX*=sc;droneVZ*=sc;}
 
   if(droneY<0.3){droneY=0.3;droneVY=Math.max(0,droneVY)*0.1;droneVX*=0.95;droneVZ*=0.95;}
   if(droneY>200){droneY=200;droneVY*=-0.2;}
