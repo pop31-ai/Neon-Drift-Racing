@@ -1367,9 +1367,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
 
   if(heliType===0){
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.065,sz*.18,0,0,Math.PI*2);X.fill();X.strokeStyle='#888';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.5;X.fillRect(-sz*.04,-sz*.1,sz*.08,sz*.07);X.globalAlpha=1;
     X.fillStyle='#555';X.fillRect(-sz*.012,sz*.1,sz*.024,sz*.12);
     X.strokeStyle='#888';X.lineWidth=1;X.beginPath();X.moveTo(-sz*.035,sz*.2);X.lineTo(sz*.035,sz*.2);X.stroke();
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.035,sz*.14,sz*.012,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#666';X.lineWidth=sw;
     X.beginPath();X.moveTo(-sz*.06,sz*.14);X.lineTo(-sz*.06,sz*.18);X.stroke();
     X.beginPath();X.moveTo(sz*.06,sz*.14);X.lineTo(sz*.06,sz*.18);X.stroke();
@@ -1378,9 +1378,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else if(heliType===1){
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.075,sz*.2,0,0,Math.PI*2);X.fill();
     X.strokeStyle='#999';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.4;X.fillRect(-sz*.05,-sz*.12,sz*.1,sz*.08);X.globalAlpha=1;
     X.fillStyle='#444';X.fillRect(-sz*.01,sz*.12,sz*.02,sz*.12);
     X.strokeStyle='#777';X.lineWidth=1;X.beginPath();X.moveTo(-sz*.03,sz*.22);X.lineTo(sz*.03,sz*.22);X.stroke();
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.04,sz*.15,sz*.013,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#666';X.lineWidth=sw;
     X.beginPath();X.moveTo(-sz*.07,sz*.14);X.lineTo(-sz*.07,sz*.18);X.stroke();
     X.beginPath();X.moveTo(sz*.07,sz*.14);X.lineTo(sz*.07,sz*.18);X.stroke();
@@ -1390,9 +1390,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
     X.fillStyle=c;X.fillRect(-sz*.09,-sz*.2,sz*.18,sz*.4);
     X.fillStyle='#8a9a7a';X.fillRect(-sz*.09,sz*.12,sz*.18,sz*.06);
     X.strokeStyle='#556';X.lineWidth=1.5;X.strokeRect(-sz*.09,-sz*.2,sz*.18,sz*.4);
-    X.fillStyle='#aaddff';X.globalAlpha=0.35;X.fillRect(-sz*.07,-sz*.16,sz*.14,sz*.06);X.globalAlpha=1;
     X.fillStyle='#555';X.fillRect(-sz*.01,sz*.18,sz*.02,sz*.1);
     X.fillStyle='#666';X.fillRect(-sz*.04,sz*.26,sz*.08,sz*.04);
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.05,sz*.15,sz*.015,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.02);
     X.beginPath();X.moveTo(-sz*.12,0);X.lineTo(-sz*.18,-sz*.02);X.stroke();
     X.beginPath();X.moveTo(sz*.12,0);X.lineTo(sz*.18,-sz*.02);X.stroke();
@@ -1401,8 +1401,8 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else if(heliType===4){
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.055,sz*.16,0,0,Math.PI*2);X.fill();
     X.strokeStyle='#445';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.35;X.fillRect(-sz*.035,-sz*.08,sz*.07,sz*.05);X.globalAlpha=1;
     X.fillStyle='#334';X.fillRect(-sz*.01,sz*.1,sz*.02,sz*.1);
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.03,sz*.12,sz*.01,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.015);
     X.beginPath();X.moveTo(-sz*.055,0);X.lineTo(-sz*.09,0);X.stroke();
     X.beginPath();X.moveTo(sz*.055,0);X.lineTo(sz*.09,0);X.stroke();
@@ -1414,9 +1414,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else if(heliType===5){
     X.fillStyle=c;X.fillRect(-sz*.11,-sz*.22,sz*.22,sz*.44);
     X.strokeStyle='#776';X.lineWidth=1.5;X.strokeRect(-sz*.11,-sz*.22,sz*.22,sz*.44);
-    X.fillStyle='#aaddff';X.globalAlpha=0.3;X.fillRect(-sz*.09,-sz*.18,sz*.18,sz*.08);X.globalAlpha=1;
     X.fillStyle='#555';X.fillRect(-sz*.008,sz*.22,sz*.016,sz*.12);
     X.fillStyle='#666';X.fillRect(-sz*.04,sz*.32,sz*.08,sz*.03);
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.06,sz*.18,sz*.015,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#777';X.lineWidth=Math.max(1,sz*0.02);
     X.beginPath();X.moveTo(-sz*.15,0);X.lineTo(-sz*.2,-sz*.02);X.stroke();
     X.beginPath();X.moveTo(sz*.15,0);X.lineTo(sz*.2,-sz*.02);X.stroke();
@@ -1427,8 +1427,8 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else if(heliType===6){
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.05,sz*.14,0,0,Math.PI*2);X.fill();
     X.strokeStyle='#6a8a7a';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.45;X.fillRect(-sz*.03,-sz*.07,sz*.06,sz*.04);X.globalAlpha=1;
     X.fillStyle='#445';X.fillRect(-sz*.008,sz*.08,sz*.016,sz*.08);
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.025,sz*.1,sz*.008,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#556';X.lineWidth=Math.max(1,sz*0.012);
     X.beginPath();X.moveTo(-sz*.05,0);X.lineTo(-sz*.08,0);X.stroke();
     X.beginPath();X.moveTo(sz*.05,0);X.lineTo(sz*.08,0);X.stroke();
@@ -1437,9 +1437,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else if(heliType===7){
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.065,sz*.18,0,0,Math.PI*2);X.fill();
     X.strokeStyle='#bbb';X.lineWidth=1;X.stroke();
-    X.fillStyle='#cce';X.globalAlpha=0.45;X.fillRect(-sz*.045,-sz*.1,sz*.09,sz*.06);X.globalAlpha=1;
     X.fillStyle='#556';X.fillRect(-sz*.012,sz*.11,sz*.024,sz*.12);
     X.beginPath();X.arc(0,sz*.24,sz*.02,0,Math.PI*2);X.fillStyle='#667';X.fill();X.strokeStyle='#889';X.lineWidth=0.5;X.stroke();
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.035,sz*.13,sz*.012,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#667';X.lineWidth=Math.max(1,sz*0.015);
     X.beginPath();X.moveTo(-sz*.07,0);X.lineTo(-sz*.11,0);X.stroke();
     X.beginPath();X.moveTo(sz*.07,0);X.lineTo(sz*.11,0);X.stroke();
@@ -1448,9 +1448,9 @@ function drawHeli3D(cx,cy,cz,cyaw,cpitch){
   }else{
     X.fillStyle=c;X.beginPath();X.ellipse(0,0,sz*.07,sz*.19,0,0,Math.PI*2);X.fill();
     X.strokeStyle='#aab';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.45;X.fillRect(-sz*.04,-sz*.1,sz*.08,sz*.06);X.globalAlpha=1;
     X.fillStyle='#556';X.fillRect(-sz*.01,sz*.12,sz*.02,sz*.1);
     X.beginPath();X.arc(0,sz*.23,sz*.025,0,Math.PI*2);X.fillStyle='#666';X.fill();X.strokeStyle='#888';X.lineWidth=0.5;X.stroke();
+    X.fillStyle='#f44';X.globalAlpha=0.7;X.beginPath();X.arc(-sz*.04,sz*.14,sz*.012,0,Math.PI*2);X.fill();X.globalAlpha=1;
     X.strokeStyle='#666';X.lineWidth=sw;
     X.beginPath();X.moveTo(-sz*.075,0);X.lineTo(-sz*.12,0);X.stroke();
     X.beginPath();X.moveTo(sz*.075,0);X.lineTo(sz*.12,0);X.stroke();
