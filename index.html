@@ -1930,6 +1930,33 @@ function drawHUD(){
   X.fillText('\u25B2',cx2,cy2-cr-6);
 }
 
+function drawFrontIndicator(){
+  var cx=W/2,cy=H/2;
+  var spd=Math.sqrt(droneVX*droneVX+droneVZ*droneVZ);
+  X.save();X.translate(cx,cy);
+  X.beginPath();X.moveTo(0,-20);X.lineTo(-6,10);X.lineTo(0,4);X.lineTo(6,10);X.closePath();
+  X.fillStyle='rgba(0,255,255,0.5)';X.fill();
+  X.strokeStyle='rgba(0,255,255,0.8)';X.lineWidth=1.5;X.stroke();
+  X.beginPath();X.arc(0,0,30,0,Math.PI*2);X.strokeStyle='rgba(0,255,255,0.15)';X.lineWidth=1;X.stroke();
+  X.restore();
+  if(spd>0.1){
+    var vx=droneVX,vy=0,vz=droneVZ;
+    var fwdX=Math.sin(droneYaw),fwdZ=Math.cos(droneYaw);
+    var sideX=Math.cos(droneYaw),sideZ=-Math.sin(droneYaw);
+    var fs=-(vx*fwdX+vz*fwdZ);
+    var ss=-(vx*sideX+vz*sideZ);
+    var sx=cx+ss*30,sy=cy+fs*30;
+    X.save();
+    X.beginPath();X.arc(sx,sy,5,0,Math.PI*2);X.fillStyle='rgba(255,255,0,0.7)';X.fill();
+    X.beginPath();X.moveTo(sx,sy-12);X.lineTo(sx-5,sy-2);X.lineTo(sx+5,sy-2);X.closePath();
+    X.fillStyle='#ff0';X.fill();
+    X.restore();
+  }
+  var hdg=Math.round(((droneYaw*180/Math.PI)%360+360)%360);
+  X.fillStyle='rgba(0,0,0,0.5)';X.fillRect(cx-30,cy-62,60,14);
+  X.fillStyle='#0ff';X.font='bold 9px monospace';X.textAlign='center';X.textBaseline='middle';
+  X.fillText('HDG '+hdg+'\u00B0',cx,cy-55);X.textBaseline='alphabetic';
+}
 function updateCPIndicator(){
   var el=document.getElementById('cp-ind');if(!checkpoints.length)return;
   var h='',next=(lastCP+1)%checkpoints.length;
@@ -2088,7 +2115,7 @@ function render(){
     X.fillText(cdCount>0?cdCount:'GO!',W/2,H/2);X.textBaseline='alphabetic';
     X.fillStyle='rgba(0,0,0,0.7)';X.fillRect(W/2-140,H-80,280,30);
     X.fillStyle='#888';X.font='11px sans-serif';X.textAlign='center';X.fillText('WASD Move | Q/E Arrows Yaw | R/F Up/Down | Shift Throttle | Space Boost | V Heli | C Camera',W/2,H-60);
-    drawHUD();drawMinimap();updateCPIndicator();
+    drawHUD();drawMinimap();updateCPIndicator();drawFrontIndicator();
     return;
   }
   if(state==='racing'){
@@ -2115,7 +2142,7 @@ function render(){
     drawBots3D(cam.x,cam.y,cam.z,cam.yw,cam.cp);
     if(opSettings.fog)drawFogOverlay();
     if(collideFlash>0){X.fillStyle='rgba(255,50,0,'+(collideFlash*0.5)+')';X.fillRect(0,0,W,H);}
-    drawMinimap();drawHUD();drawHeliCockpit();
+    drawMinimap();drawHUD();drawHeliCockpit();drawFrontIndicator();
     if(trainerMode)drawTrainerPads(cam.x,cam.y,cam.z,cam.yw,cam.cp);
     if(debugOn){drawDebug();drawDebugWalls(cam.x,cam.y,cam.z,cam.yw,cam.cp);}
     var vehLabel=heliMode?'HELICOPTER':'DRONE';
