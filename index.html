@@ -1943,9 +1943,9 @@ function drawFrontIndicator(){
     var vx=droneVX,vy=0,vz=droneVZ;
     var fwdX=Math.sin(droneYaw),fwdZ=Math.cos(droneYaw);
     var sideX=Math.cos(droneYaw),sideZ=-Math.sin(droneYaw);
-    var fs=-(vx*fwdX+vz*fwdZ);
-    var ss=-(vx*sideX+vz*sideZ);
-    var sx=cx+ss*30,sy=cy+fs*30;
+    var fs=vx*fwdX+vz*fwdZ;
+    var ss=vx*sideX+vz*sideZ;
+    var sx=cx+ss*30,sy=cy-fs*30;
     X.save();
     X.beginPath();X.arc(sx,sy,5,0,Math.PI*2);X.fillStyle='rgba(255,255,0,0.7)';X.fill();
     X.beginPath();X.moveTo(sx,sy-12);X.lineTo(sx-5,sy-2);X.lineTo(sx+5,sy-2);X.closePath();
