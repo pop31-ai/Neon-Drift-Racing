@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Helicopter Inspector — 3D Вертолёт</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0e1a; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #fff; }
+#canvas3d { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+
+.hud { position: fixed; z-index: 10; pointer-events: none; }
+.hud * { pointer-events: auto; }
+
+.top-bar {
+  top: 0; left: 0; right: 0; height: 56px;
+  background: linear-gradient(180deg, rgba(0,20,40,0.95), rgba(0,20,40,0.0));
+  display: flex; align-items: center; padding: 0 24px; gap: 20px;
+}
+.top-bar h1 { font-size: 18px; color: #ff6a00; letter-spacing: 2px; text-transform: uppercase; }
+.progress-wrap {
+  flex: 1; max-width: 400px; height: 8px; background: rgba(255,255,255,0.1);
+  border-radius: 4px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0%; background: linear-gradient(90deg, #ff6a00, #ffcc00);
+  border-radius: 4px; transition: width 0.5s ease;
+}
+.progress-text { font-size: 13px; color: #88aacc; min-width: 60px; text-align: right; }
+.round-badge {
+  background: rgba(255,106,0,0.15); border: 1px solid #ff6a00;
+  padding: 4px 14px; border-radius: 20px; font-size: 12px; color: #ff6a00;
+}
+
+.guide-panel {
+  position: fixed; bottom: 20px; left: 20px; z-index: 10;
+  width: 320px; background: rgba(0,15,30,0.85);
+  border: 1px solid rgba(255,106,0,0.3); border-radius: 12px;
+  padding: 16px; backdrop-filter: blur(10px);
+  transition: all 0.5s ease;
+}
+.guide-panel.hidden { transform: translateY(120%); opacity: 0; pointer-events: none; }
+.guide-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: radial-gradient(circle, #ff6a00, #663300);
+  border: 2px solid #ff6a00; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; animation: guidePulse 2s ease-in-out infinite;
+}
+@keyframes guidePulse {
+  0%,100% { box-shadow: 0 0 10px rgba(255,106,0,0.3); }
+  50% { box-shadow: 0 0 25px rgba(255,106,0,0.6); }
+}
+.guide-name { font-size: 11px; color: #ff6a00; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.guide-text { font-size: 14px; color: #b0d0e8; line-height: 1.5; }
+.guide-hint {
+  margin-top: 10px; padding: 8px 12px; background: rgba(255,106,0,0.1);
+  border-left: 3px solid #ff6a00; border-radius: 0 6px 6px 0;
+  font-size: 12px; color: #cc8844;
+}
+
+.quiz-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: rgba(0,5,15,0.85); display: flex; align-items: center;
+  justify-content: center; backdrop-filter: blur(5px);
+  transition: opacity 0.4s; opacity: 0; pointer-events: none;
+}
+.quiz-overlay.active { opacity: 1; pointer-events: auto; }
+.quiz-card {
+  background: rgba(0,20,40,0.95); border: 1px solid rgba(255,106,0,0.4);
+  border-radius: 16px; padding: 32px; max-width: 520px; width: 90%;
+  text-align: center;
+}
+.quiz-card h2 { color: #ff6a00; font-size: 16px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+.quiz-question { font-size: 18px; color: #e0f0ff; margin: 16px 0 24px; line-height: 1.5; }
+.quiz-options { display: flex; flex-direction: column; gap: 10px; }
+.quiz-option {
+  padding: 14px 20px; background: rgba(0,40,80,0.4);
+  border: 1px solid rgba(255,106,0,0.2); border-radius: 10px;
+  font-size: 15px; color: #b0d0e8; cursor: pointer; transition: all 0.2s;
+  text-align: left;
+}
+.quiz-option:hover { background: rgba(60,50,30,0.5); border-color: #ff6a00; color: #fff; }
+.quiz-option.correct { background: rgba(0,200,100,0.3); border-color: #00ff88; color: #00ff88; }
+.quiz-option.wrong { background: rgba(200,50,50,0.3); border-color: #ff4444; color: #ff6666; }
+.quiz-score { font-size: 14px; color: #88aacc; margin-top: 16px; }
+.quiz-next {
+  margin-top: 20px; padding: 12px 32px; background: linear-gradient(135deg, #ff6a00, #cc4400);
+  border: none; border-radius: 8px; font-size: 14px; color: #fff;
+  cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+  transition: transform 0.2s;
+}
+.quiz-next:hover { transform: scale(1.05); }
+
+.arrow-indicator {
+  position: fixed; z-index: 15; pointer-events: none;
+  transition: all 0.3s ease;
+}
+.arrow-indicator svg { filter: drop-shadow(0 0 8px rgba(255,106,0,0.8)); }
+.arrow-label {
+  position: absolute; white-space: nowrap; font-size: 12px;
+  color: #ff6a00; text-shadow: 0 0 10px rgba(255,106,0,0.5);
+  top: -20px; left: 50%; transform: translateX(-50%);
+}
+
+.notification {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%) translateY(-20px);
+  z-index: 25; padding: 12px 28px; border-radius: 10px;
+  font-size: 14px; opacity: 0; transition: all 0.4s ease;
+  pointer-events: none; max-width: 500px; text-align: center;
+}
+.notification.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.notification.success {
+  background: rgba(0,200,100,0.2); border: 1px solid #00ff88; color: #00ff88;
+}
+.notification.info {
+  background: rgba(255,106,0,0.2); border: 1px solid #ff6a00; color: #ff6a00;
+}
+
+.parts-panel {
+  position: fixed; top: 60px; right: 16px; z-index: 10;
+  width: 240px; max-height: calc(100vh - 80px); overflow-y: auto;
+  background: rgba(0,15,30,0.8); border: 1px solid rgba(255,106,0,0.2);
+  border-radius: 10px; padding: 12px;
+}
+.part-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; margin-bottom: 4px; border-radius: 6px;
+  transition: background 0.2s; cursor: pointer;
+}
+.part-item:hover { background: rgba(255,106,0,0.1); }
+.part-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid #335; background: transparent;
+  transition: all 0.3s;
+}
+.part-item.found .part-dot { background: #00ff88; border-color: #00ff88; }
+.part-item.current .part-dot { background: #ff6a00; border-color: #ff6a00; animation: dotPulse 1s infinite; }
+@keyframes dotPulse { 0%,100% { box-shadow: 0 0 4px #ff6a00; } 50% { box-shadow: 0 0 12px #ff6a00; } }
+.part-name { font-size: 13px; color: #88aacc; }
+.part-item.found .part-name { color: #00ff88; }
+.part-item.current .part-name { color: #ff6a00; }
+
+.start-screen {
+  position: fixed; inset: 0; z-index: 50;
+  background: radial-gradient(ellipse at center, #1a1008 0%, #0a0604 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: opacity 0.8s;
+}
+.start-screen.hidden { opacity: 0; pointer-events: none; }
+.start-screen h1 {
+  font-size: 36px; color: #ff6a00; letter-spacing: 4px;
+  text-transform: uppercase; margin-bottom: 8px;
+  text-shadow: 0 0 30px rgba(255,106,0,0.4);
+}
+.start-screen .subtitle { font-size: 14px; color: #886644; margin-bottom: 40px; letter-spacing: 2px; }
+.start-screen .heli-icon { font-size: 80px; margin-bottom: 30px; animation: float 3s ease-in-out infinite; }
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+.start-btn {
+  padding: 16px 48px; background: linear-gradient(135deg, #ff6a00, #aa4400);
+  border: none; border-radius: 12px; font-size: 16px; color: #fff;
+  cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+  transition: all 0.3s; position: relative; overflow: hidden;
+}
+.start-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(255,106,0,0.4); }
+.start-desc { margin-top: 20px; font-size: 13px; color: #665544; max-width: 400px; text-align: center; line-height: 1.6; }
+
+.final-screen {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(5,10,18,0.95);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.8s;
+}
+.final-screen.active { opacity: 1; pointer-events: auto; }
+.final-screen h1 { font-size: 32px; color: #00ff88; margin-bottom: 10px; }
+.final-stats { font-size: 15px; color: #88aacc; margin: 6px 0; }
+.final-score {
+  font-size: 64px; color: #ff6a00; margin: 20px 0;
+  text-shadow: 0 0 40px rgba(255,106,0,0.5);
+}
+.restart-btn {
+  margin-top: 30px; padding: 14px 40px; background: linear-gradient(135deg, #ff6a00, #aa4400);
+  border: none; border-radius: 10px; font-size: 15px; color: #fff;
+  cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+}
+
+.view-buttons {
+  position: fixed; bottom: 20px; right: 20px; z-index: 10;
+  display: flex; gap: 8px; flex-wrap: wrap; max-width: 300px; justify-content: flex-end;
+}
+.view-btn {
+  padding: 8px 14px; background: rgba(0,20,40,0.8);
+  border: 1px solid rgba(255,106,0,0.3); border-radius: 8px;
+  font-size: 12px; color: #88aacc; cursor: pointer; transition: all 0.2s;
+}
+.view-btn:hover { border-color: #ff6a00; color: #ff6a00; }
+.view-btn.active { background: rgba(255,106,0,0.2); border-color: #ff6a00; color: #ff6a00; }
+
+.loading-bar {
+  width: 200px; height: 3px; background: rgba(255,255,255,0.1);
+  border-radius: 2px; overflow: hidden; margin-top: 20px;
+}
+.loading-fill {
+  height: 100%; width: 30%; background: #ff6a00;
+  border-radius: 2px; animation: loadSlide 1.5s ease-in-out infinite;
+}
+@keyframes loadSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+</style>
+</head>
+<body>
+
+<canvas id="canvas3d"></canvas>
+
+<div class="start-screen" id="startScreen">
+  <div class="heli-icon">🚁</div>
+  <h1>Helicopter Inspector</h1>
+  <div class="subtitle">3D Инспекция вертолёта</div>
+  <button class="start-btn" onclick="startGame()">Начать инспекцию</button>
+  <div class="start-desc">
+    Осмотрите вертолёт со всех сторон. Найдите 10 ключевых деталей конструкции.
+    Ответьте на вопросы викторины, чтобы доказать свою компетентность.
+  </div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+</div>
+
+<div class="final-screen" id="finalScreen">
+  <h1>Инспекция завершена</h1>
+  <div class="final-stats" id="finalParts"></div>
+  <div class="final-score" id="finalScore"></div>
+  <div class="final-stats" id="finalRank"></div>
+  <button class="restart-btn" onclick="location.reload()">Новая инспекция</button>
+</div>
+
+<div class="hud top-bar" id="topBar" style="display:none;">
+  <h1>Helicopter Inspector</h1>
+  <div class="round-badge" id="roundBadge">Раунд 1/4</div>
+  <div class="progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="progress-text" id="progressText">0/10</div>
+</div>
+
+<div class="parts-panel" id="partsPanel" style="display:none;"></div>
+
+<div class="guide-panel hidden" id="guidePanel">
+  <div class="guide-avatar">🧑‍✈️</div>
+  <div class="guide-name">Механик Ветров</div>
+  <div class="guide-text" id="guideText">Добро пожаловать на борт!</div>
+  <div class="guide-hint" id="guideHint" style="display:none;"></div>
+</div>
+
+<div class="quiz-overlay" id="quizOverlay">
+  <div class="quiz-card">
+    <h2 id="quizTitle">Викторина</h2>
+    <div class="quiz-question" id="quizQuestion"></div>
+    <div class="quiz-options" id="quizOptions"></div>
+    <div class="quiz-score" id="quizScore"></div>
+    <button class="quiz-next" id="quizNext" style="display:none;" onclick="nextQuizQuestion()">Далее</button>
+  </div>
+</div>
+
+<div class="arrow-indicator" id="arrowIndicator" style="display:none;">
+  <svg width="40" height="40" viewBox="0 0 40 40">
+    <polygon points="20,0 35,35 20,25 5,35" fill="#ff6a00" opacity="0.9"/>
+  </svg>
+  <div class="arrow-label" id="arrowLabel"></div>
+</div>
+
+<div class="notification" id="notification"></div>
+
+<div class="view-buttons" id="viewButtons" style="display:none;">
+  <button class="view-btn active" onclick="setView('auto')">Авто</button>
+  <button class="view-btn" onclick="setView('front')">Нос</button>
+  <button class="view-btn" onclick="setView('back')">Хвост</button>
+  <button class="view-btn" onclick="setView('left')">Левый</button>
+  <button class="view-btn" onclick="setView('right')">Правый</button>
+  <button class="view-btn" onclick="setView('top')">Сверху</button>
+  <button class="view-btn" onclick="setView('cabin')">Кабина</button>
+  <button class="view-btn" onclick="toggleExplode()">Взрыв-схема</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const HELI_PARTS = [
+  {
+    id: 'fuselage', name: 'Фюзеляж', section: 'Корпус',
+    desc: 'Основной корпус вертолёта, вмещающий кабину, двигатель и отсек для груза/пассажиров.',
+    position: [0, 0, 0], color: 0x556677,
+    geometry: 'fuselage',
+    quiz: {
+      question: 'Какую форму имеет фюзеляж большинства вертолётов для снижения сопротивления?',
+      options: [
+        'Обтекаемую (аэродинамическую)',
+        'Кубическую',
+        'Цилиндрическую без обтекателей',
+        'Плоскую'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'mainRotor', name: 'Несущий винт', section: 'Роторы',
+    desc: 'Главная лопасть, создающая подъёмную силу. Вращается горизонтально над вертолётом.',
+    position: [0, 2.8, -0.3], color: 0x444444,
+    geometry: 'mainRotor',
+    quiz: {
+      question: 'Сколько лопастей обычно имеет несущий винт среднего вертолёта?',
+      options: [
+        '2–5 лопастей (обычно 4)',
+        'Всегда 2 лопасти',
+        '10–15 лопастей',
+        'Только 1 лопасть'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'tailRotor', name: 'Рулевой винт', section: 'Роторы',
+    desc: 'Малый вертикальный пропеллер на хвосте, компенсирующий крутящий момент несущего винта.',
+    position: [0, 0.6, -4.2], color: 0x555555,
+    geometry: 'tailRotor',
+    quiz: {
+      question: 'Зачем нужен рулевой винт?',
+      options: [
+        'Компенсирует вращение корпуса от основного винта',
+        'Создаёт дополнительную подъёмную силу',
+        'Охлаждает двигатель',
+        'Служит рулём высоты'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'tailBoom', name: 'Хвостовая балка', section: 'Корпус',
+    desc: 'Вытянутая конструкция, соединяющая фюзеляж с рулевым винтом и вертикальным оперением.',
+    position: [0, 0.3, -2.8], color: 0x556677,
+    geometry: 'tailBoom',
+    quiz: {
+      question: 'Что расположено внутри хвостовой балки?',
+      options: [
+        'Трансмиссионный вал, передающий вращение к рулевому винту',
+        'Основной двигатель',
+        'Топливные баки',
+        'Кабина пилота'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'cockpit', name: 'Кабина пилота', section: 'Управление',
+    desc: 'Передняя часть с лобовым стеклом, панелью приборов и органами управления полётом.',
+    position: [0, 0.5, 1.5], color: 0x88aacc,
+    geometry: 'cockpit',
+    quiz: {
+      question: 'Какими основными органами управления пилот управляет вертолётом?',
+      options: [
+        'Циклический рычаг, рычаг общего шага и педали',
+        'Штурвалом и педалями как в самолёте',
+        'Только кнопками на приборной панели',
+        'Баркасом и веслом'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'engine', name: 'Двигатель', section: 'Силовая установка',
+    desc: 'Газотурбинный двигатель, вращающий несущий винт через редуктор.',
+    position: [0, 1.2, -0.5], color: 0x778899,
+    geometry: 'engine',
+    quiz: {
+      question: 'Какой тип двигателя используется в большинстве современных вертолётов?',
+      options: [
+        'Газотурбинный (ТВД)',
+        'Поршневой автомобильный',
+        'Паровой',
+        'Электрический на батарейках'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'skids', name: 'Шасси (лыжи)', section: 'Шасси',
+    desc: 'Несущая конструкция для посадки. Состоит из двух лыж и стоек.',
+    position: [0, -1.1, -0.3], color: 0x444444,
+    geometry: 'skids',
+    quiz: {
+      question: 'Почему大多数 вертолётов имеют лыжное шасси, а не колёсное?',
+      options: [
+        'Оно проще, легче и дешевле в производстве',
+        'Оно быстрее колёсного',
+        'Лыжи работают как паруса',
+        'Колёса не выдерживают вес вертолёта'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'transmission', name: 'Редуктор', section: 'Силовая установка',
+    desc: 'Редуктор, снижающий обороты двигателя до рабочей скорости несущего винта.',
+    position: [0, 1.8, -0.3], color: 0x667788,
+    geometry: 'transmission',
+    quiz: {
+      question: 'Почему вертолёту нужен редуктор, а не привод напрямую от двигателя?',
+      options: [
+        'Двигатель вращается слишком быстро (~20 000 об/мин), а винт нужен на ~300 об/мин',
+        'Редуктор увеличивает скорость вращения',
+        'Без редуктора вертолёт не может летать',
+        'Редуктор нужен только для украшения'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'instrumentPanel', name: 'Приборная доска', section: 'Управление',
+    desc: 'Панель с приборами: высотомер, вариометр, указатель оборотов, GPS и другие.',
+    position: [0, 0.5, 1.0], color: 0x223344,
+    geometry: 'instrumentPanel',
+    quiz: {
+      question: 'Какой прибор показывает вертикальную скорость набора/снижения?',
+      options: [
+        'Вариометр',
+        'Высотомер',
+        'Альтиметр',
+        'Компас'
+      ],
+      correct: 0
+    }
+  },
+  {
+    id: 'antenna', name: 'Антенна', section: 'Оборудование',
+    desc: 'Устройства связи и навигации: радиостанция, передатчик, навигационные антенны.',
+    position: [0.4, 1.5, 0.5], color: 0x333333,
+    geometry: 'antenna',
+    quiz: {
+      question: 'Какая антенна обязательна для связи вертолёта с диспетчером?',
+      options: [
+        'VHF-радиостанция (very high frequency)',
+        'FM-приёмник',
+        'Wi-Fi роутер',
+        'Bluetooth-антенна'
+      ],
+      correct: 0
+    }
+  }
+];
+
+const GUIDE_SCRIPTS = {
+  welcome: 'Приветствую, инспектор! Я — механик Ветров. Покажу вам вертолёт. Начнём с осмотра корпуса.',
+  fuselage: 'Фюзеляж — это «тело» вертолёта. Вся начинка: пилот, пассажиры, груз, приборы — внутри.',
+  mainRotor: 'Несущий винт — главный «крылья» вертолёта. Он создаёт тягу, поднимающую машину в воздух.',
+  tailRotor: 'Рулевой винт — маленький, но незаменимый. Без него вертолёт вращался бы вокруг оси.',
+  tailBoom: 'Хвостовая балка — длинная «шея», соединяющая корпус с хвостовым винтом.',
+  cockpit: 'Кабина — рабочее место пилота. Здесь циклический рычаг, педали и приборы.',
+  engine: 'Газотурбинный двигатель — сердце вертолёта. Мощный и лёгкий.',
+  skids: 'Лыжное шасси — простая и надёжная конструкция для посадки на любую поверхность.',
+  transmission: 'Редуктор — «переводчик» между быстрым двигателем и медленным винтом.',
+  instrumentPanel: 'Приборная доска — глаза пилота в небе. Высота, скорость, обороты, навигация.',
+  antenna: 'Антенны — голос и компас вертолёта. Связь с землёй и навигация.',
+  quiz_intro: 'Теперь проверим ваши знания! Ответьте на вопросы о частях вертолёта.',
+  round3: 'Отлично! Теперь осмотрите вертолёт сверху. Обратите внимание на роторную систему.',
+  round4: 'Финальная проверка! Соберите все знания воедино.',
+  done: 'Инспекция завершена! Вы отлично разбираетесь в вертолётах, инспектор!'
+};
+
+let scene, camera, renderer, heliGroup;
+let raycaster, mouse;
+let partMeshes = [];
+let currentPartIndex = 0;
+let foundParts = new Set();
+let currentRound = 1;
+let quizScore = 0;
+let quizIndex = 0;
+let exploded = false;
+let autoRotate = true;
+let targetCameraPos = null;
+let targetLookAt = new THREE.Vector3(0, 0, 0);
+let clock;
+let arrowVisible = false;
+let mainRotorMesh = null;
+let tailRotorMesh = null;
+
+function initScene() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a0e1a, 0.012);
+
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(8, 4, 10);
+
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+
+  clock = new THREE.Clock();
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  const ambientLight = new THREE.AmbientLight(0x445566, 0.5);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+  dirLight.position.set(10, 15, 8);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(2048, 2048);
+  dirLight.shadow.camera.near = 0.5;
+  dirLight.shadow.camera.far = 50;
+  dirLight.shadow.camera.left = -15;
+  dirLight.shadow.camera.right = 15;
+  dirLight.shadow.camera.top = 15;
+  dirLight.shadow.camera.bottom = -15;
+  scene.add(dirLight);
+
+  const fillLight = new THREE.DirectionalLight(0x88aacc, 0.3);
+  fillLight.position.set(-5, 3, -5);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.DirectionalLight(0xff6a00, 0.15);
+  rimLight.position.set(0, 5, -10);
+  scene.add(rimLight);
+
+  const groundGeom = new THREE.PlaneGeometry(200, 200);
+  const groundMat = new THREE.MeshPhongMaterial({ color: 0x1a2a1a, specular: 0x111111 });
+  const ground = new THREE.Mesh(groundGeom, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -1.2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const helipadGeom = new THREE.CircleGeometry(3, 32);
+  const helipadMat = new THREE.MeshPhongMaterial({ color: 0x555555, specular: 0x222222 });
+  const helipad = new THREE.Mesh(helipadGeom, helipadMat);
+  helipad.rotation.x = -Math.PI / 2;
+  helipad.position.y = -1.19;
+  scene.add(helipad);
+
+  const ringGeom = new THREE.RingGeometry(2.5, 3, 32);
+  const ringMat = new THREE.MeshPhongMaterial({ color: 0xffcc00, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeom, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = -1.18;
+  scene.add(ring);
+
+  const hGeom = new THREE.PlaneGeometry(0.3, 1.8);
+  const hMat = new THREE.MeshPhongMaterial({ color: 0xffcc00, side: THREE.DoubleSide });
+  const h1 = new THREE.Mesh(hGeom, hMat);
+  h1.rotation.x = -Math.PI / 2;
+  h1.position.set(0, -1.17, 0);
+  scene.add(h1);
+  const h2 = h1.clone();
+  h2.rotation.z = Math.PI / 2;
+  h2.position.set(0, -1.17, 0);
+  scene.add(h2);
+
+  const skyGeom = new THREE.SphereGeometry(100, 32, 32);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: {},
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition).y;
+        vec3 skyTop = vec3(0.08, 0.1, 0.18);
+        vec3 skyBot = vec3(0.12, 0.14, 0.18);
+        vec3 col = mix(skyBot, skyTop, max(h, 0.0));
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+  scene.add(new THREE.Mesh(skyGeom, skyMat));
+
+  heliGroup = new THREE.Group();
+  scene.add(heliGroup);
+
+  buildHelicopter();
+  buildPartsList();
+  updateProgress();
+}
+
+function buildHelicopter() {
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x556677, specular: 0x222222 });
+  const darkMat = new THREE.MeshPhongMaterial({ color: 0x444444, specular: 0x666666 });
+  const glassMat = new THREE.MeshPhongMaterial({ color: 0x88aacc, transparent: true, opacity: 0.5, specular: 0xffffff, shininess: 100 });
+  const stripMat = new THREE.MeshPhongMaterial({ color: 0xff6a00 });
+
+  const fuselageGeom = new THREE.SphereGeometry(1, 16, 12);
+  fuselageGeom.scale(0.8, 0.65, 1.4);
+  const fuselage = new THREE.Mesh(fuselageGeom, bodyMat);
+  fuselage.castShadow = true;
+  fuselage.name = 'fuselage';
+  heliGroup.add(fuselage);
+
+  const bellyGeom = new THREE.SphereGeometry(0.9, 16, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5);
+  bellyGeom.scale(0.8, 0.4, 1.3);
+  const belly = new THREE.Mesh(bellyGeom, bodyMat);
+  belly.position.y = -0.15;
+  belly.castShadow = true;
+  heliGroup.add(belly);
+
+  const stripGeom = new THREE.BoxGeometry(1.65, 0.06, 0.15);
+  const strip1 = new THREE.Mesh(stripGeom, stripMat);
+  strip1.position.set(0, 0.1, 0.6);
+  heliGroup.add(strip1);
+  const strip2 = strip1.clone();
+  strip2.position.z = -0.6;
+  heliGroup.add(strip2);
+
+  const cockpitGeom = new THREE.SphereGeometry(0.55, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  cockpitGeom.scale(0.75, 0.6, 0.8);
+  const cockpit = new THREE.Mesh(cockpitGeom, glassMat);
+  cockpit.position.set(0, 0.35, 1.1);
+  cockpit.name = 'cockpit';
+  cockpit.castShadow = true;
+  heliGroup.add(cockpit);
+
+  const frameMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+  const frameGeom = new THREE.TorusGeometry(0.55, 0.015, 6, 16, Math.PI);
+  const frame1 = new THREE.Mesh(frameGeom, frameMat);
+  frame1.rotation.y = Math.PI / 2;
+  frame1.position.set(0, 0.35, 1.1);
+  heliGroup.add(frame1);
+
+  const tailBoomGeom = new THREE.CylinderGeometry(0.12, 0.22, 3.5, 8);
+  tailBoomGeom.rotateX(Math.PI / 2);
+  const tailBoom = new THREE.Mesh(tailBoomGeom, bodyMat);
+  tailBoom.position.set(0, 0.15, -2.5);
+  tailBoom.castShadow = true;
+  tailBoom.name = 'tailBoom';
+  heliGroup.add(tailBoom);
+
+  const finVertGeom = new THREE.BoxGeometry(0.03, 0.8, 0.4);
+  const finVert = new THREE.Mesh(finVertGeom, bodyMat);
+  finVert.position.set(0, 0.6, -4.2);
+  finVert.name = 'tailFin';
+  heliGroup.add(finFinVert = finVert);
+
+  const finHorizGeom = new THREE.BoxGeometry(0.6, 0.03, 0.25);
+  const finHoriz = new THREE.Mesh(finHorizGeom, bodyMat);
+  finHoriz.position.set(0, 0.35, -4.1);
+  heliGroup.add(finHoriz);
+
+  const engineGeom = new THREE.CylinderGeometry(0.2, 0.25, 0.7, 10);
+  const engine = new THREE.Mesh(engineGeom, darkMat);
+  engine.position.set(0, 0.9, -0.3);
+  engine.castShadow = true;
+  engine.name = 'engine';
+  heliGroup.add(engine);
+
+  const intakeGeom = new THREE.CylinderGeometry(0.18, 0.18, 0.15, 10);
+  const intake = new THREE.Mesh(intakeGeom, new THREE.MeshPhongMaterial({ color: 0x222222 }));
+  intake.position.set(0, 0.95, 0.1);
+  heliGroup.add(intake);
+
+  const exhaustGeom = new THREE.CylinderGeometry(0.12, 0.15, 0.2, 8);
+  const exhaust = new THREE.Mesh(exhaustGeom, new THREE.MeshPhongMaterial({ color: 0x555555, emissive: 0x221100, emissiveIntensity: 0.2 }));
+  exhaust.position.set(0.25, 0.85, -0.7);
+  heliGroup.add(exhaust);
+
+  const transGeom = new THREE.CylinderGeometry(0.28, 0.28, 0.35, 10);
+  const transmission = new THREE.Mesh(transGeom, darkMat);
+  transmission.position.set(0, 1.5, -0.3);
+  transmission.castShadow = true;
+  transmission.name = 'transmission';
+  heliGroup.add(transmission);
+
+  const mastGeom = new THREE.CylinderGeometry(0.06, 0.08, 0.5, 8);
+  const mast = new THREE.Mesh(mastGeom, darkMat);
+  mast.position.set(0, 1.9, -0.3);
+  heliGroup.add(mast);
+
+  const hubGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.15, 10);
+  const hub = new THREE.Mesh(hubGeom, darkMat);
+  hub.position.set(0, 2.2, -0.3);
+  heliGroup.add(hub);
+
+  const bladeGeom = new THREE.BoxGeometry(0.12, 0.015, 3.2);
+  const bladeMat = new THREE.MeshPhongMaterial({ color: 0x555555, specular: 0x888888 });
+
+  const rotorGroup = new THREE.Group();
+  rotorGroup.position.set(0, 2.25, -0.3);
+
+  for (let i = 0; i < 4; i++) {
+    const blade = new THREE.Mesh(bladeGeom.clone(), bladeMat);
+    blade.rotation.y = (i / 4) * Math.PI * 2;
+    const tipGeom = new THREE.BoxGeometry(0.1, 0.012, 0.4);
+    const tip = new THREE.Mesh(tipGeom, new THREE.MeshPhongMaterial({ color: 0xff6a00 }));
+    tip.position.z = 1.6;
+    blade.add(tip);
+    rotorGroup.add(blade);
+  }
+  rotorGroup.name = 'mainRotor';
+  mainRotorMesh = rotorGroup;
+  heliGroup.add(rotorGroup);
+
+  const tailRotorGroup = new THREE.Group();
+  tailRotorGroup.position.set(0, 0.6, -4.35);
+
+  const tailBladeGeom = new THREE.BoxGeometry(0.08, 0.012, 0.7);
+  for (let i = 0; i < 2; i++) {
+    const tb = new THREE.Mesh(tailBladeGeom.clone(), bladeMat);
+    tb.rotation.x = (i / 2) * Math.PI;
+    tailRotorGroup.add(tb);
+  }
+  tailRotorGroup.rotation.y = Math.PI / 2;
+  tailRotorGroup.name = 'tailRotor';
+  tailRotorMesh = tailRotorGroup;
+  heliGroup.add(tailRotorGroup);
+
+  const skidMat = new THREE.MeshPhongMaterial({ color: 0x444444, specular: 0x666666 });
+
+  const skidGroup = new THREE.Group();
+  skidGroup.name = 'skids';
+
+  for (let side = -1; side <= 1; side += 2) {
+    const barGeom = new THREE.CylinderGeometry(0.025, 0.025, 2.2, 6);
+    barGeom.rotateX(Math.PI / 2);
+    const bar = new THREE.Mesh(barGeom, skidMat);
+    bar.position.set(side * 0.55, -1.0, -0.1);
+    bar.castShadow = true;
+    skidGroup.add(bar);
+
+    for (let fz = -1; fz <= 1; fz += 2) {
+      const strutGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6);
+      const strut = new THREE.Mesh(strutGeom, skidMat);
+      strut.position.set(side * 0.55, -0.7, fz * 0.5);
+      skidGroup.add(strut);
+    }
+
+    const crossGeom = new THREE.CylinderGeometry(0.015, 0.015, 1.1, 6);
+    crossGeom.rotateZ(Math.PI / 2);
+    const cross1 = new THREE.Mesh(crossGeom, skidMat);
+    cross1.position.set(0, -1.0, 0.4);
+    skidGroup.add(cross1);
+    const cross2 = new THREE.Mesh(crossGeom.clone(), skidMat);
+    cross2.position.set(0, -1.0, -0.6);
+    skidGroup.add(cross2);
+  }
+  heliGroup.add(skidGroup);
+
+  const ipGroup = new THREE.Group();
+  ipGroup.name = 'instrumentPanel';
+  const ipGeom = new THREE.BoxGeometry(0.5, 0.3, 0.05);
+  const ipMat = new THREE.MeshPhongMaterial({ color: 0x223344 });
+  const ip = new THREE.Mesh(ipGeom, ipMat);
+  ipGroup.add(ip);
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 3; c++) {
+      const gaugeGeom = new THREE.CircleGeometry(0.04, 12);
+      const gaugeMat = new THREE.MeshPhongMaterial({ color: 0x111111, emissive: 0x003311, emissiveIntensity: 0.5 });
+      const gauge = new THREE.Mesh(gaugeGeom, gaugeMat);
+      gauge.position.set(-0.12 + c * 0.12, 0.06 - r * 0.12, 0.03);
+      ipGroup.add(gauge);
+    }
+  }
+  ipGroup.position.set(0, 0.3, 1.05);
+  ipGroup.rotation.x = -0.3;
+  heliGroup.add(ipGroup);
+
+  const antGroup = new THREE.Group();
+  antGroup.name = 'antenna';
+  const antPoleGeom = new THREE.CylinderGeometry(0.008, 0.008, 0.4, 4);
+  const antMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+  const antPole = new THREE.Mesh(antPoleGeom, antMat);
+  antPole.position.set(0, 0.2, 0);
+  antGroup.add(antPole);
+  const antTopGeom = new THREE.SphereGeometry(0.02, 6, 6);
+  const antTop = new THREE.Mesh(antTopGeom, new THREE.MeshPhongMaterial({ color: 0xff3333, emissive: 0xff0000, emissiveIntensity: 0.3 }));
+  antTop.position.set(0, 0.42, 0);
+  antGroup.add(antTop);
+  antGroup.position.set(0.3, 1.1, 0.5);
+  heliGroup.add(antGroup);
+
+  createLandingLight();
+
+  HELI_PARTS.forEach(part => {
+    const obj = heliGroup.getObjectByName(part.id);
+    if (obj) {
+      partMeshes.push({ obj, data: part });
+    }
+  });
+}
+
+function createLandingLight() {
+  const lightGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 8);
+  lightGeom.rotateX(Math.PI / 2);
+  const lightMat = new THREE.MeshPhongMaterial({ color: 0xffffcc, emissive: 0xffff00, emissiveIntensity: 0.5 });
+  const light = new THREE.Mesh(lightGeom, lightMat);
+  light.position.set(0, -0.6, 0.9);
+  heliGroup.add(light);
+
+  const coneGeom = new THREE.ConeGeometry(0.3, 1.5, 8, 1, true);
+  const coneMat = new THREE.MeshPhongMaterial({ color: 0xffffcc, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
+  const cone = new THREE.Mesh(coneGeom, coneMat);
+  cone.position.set(0, -1.35, 1.5);
+  cone.rotation.x = Math.PI;
+  heliGroup.add(cone);
+}
+
+let finFinVert;
+
+function startGame() {
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('topBar').style.display = 'flex';
+  document.getElementById('partsPanel').style.display = 'block';
+  document.getElementById('viewButtons').style.display = 'flex';
+  showGuide('welcome');
+  highlightCurrentPart();
+  animate();
+}
+
+function buildPartsList() {
+  const panel = document.getElementById('partsPanel');
+  panel.innerHTML = '<div style="font-size:11px;color:#ff6a00;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Комплектующие</div>';
+  HELI_PARTS.forEach((part, i) => {
+    const div = document.createElement('div');
+    div.className = 'part-item' + (i === 0 ? ' current' : '');
+    div.id = 'part-item-' + part.id;
+    div.innerHTML = `<div class="part-dot"></div><div class="part-name">${part.name}</div>`;
+    div.onclick = () => focusOnPart(part.id);
+    panel.appendChild(div);
+  });
+}
+
+function updateProgress() {
+  const pct = (foundParts.size / HELI_PARTS.length) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = foundParts.size + '/' + HELI_PARTS.length;
+  document.getElementById('roundBadge').textContent = 'Раунд ' + currentRound + '/4';
+}
+
+function showGuide(key) {
+  const panel = document.getElementById('guidePanel');
+  panel.classList.remove('hidden');
+  document.getElementById('guideText').textContent = GUIDE_SCRIPTS[key] || key;
+  const hintEl = document.getElementById('guideHint');
+  if (currentRound <= 2 && !foundParts.has(HELI_PARTS[currentPartIndex]?.id)) {
+    hintEl.style.display = 'block';
+    const part = HELI_PARTS[currentPartIndex];
+    if (part) {
+      const dir = getPartDirection(part);
+      hintEl.textContent = 'Подсказка: посмотрите ' + dir;
+    }
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
+function getPartDirection(part) {
+  const pos = part.position;
+  if (pos[2] > 1) return 'в сторону носа →';
+  if (pos[2] < -2) return 'в сторону хвоста ←';
+  if (pos[0] > 0.3) return 'на правый борт';
+  if (pos[0] < -0.3) return 'на левый борт';
+  if (pos[1] > 1.5) return 'наверх (роторы)';
+  if (pos[1] < -0.5) return 'вниз (шасси)';
+  return 'на центр корпуса';
+}
+
+function highlightCurrentPart() {
+  if (currentPartIndex >= HELI_PARTS.length) return;
+  const part = HELI_PARTS[currentPartIndex];
+  const item = document.getElementById('part-item-' + part.id);
+  document.querySelectorAll('.part-item').forEach(el => el.classList.remove('current'));
+  if (item) {
+    item.classList.add('current');
+    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  showGuide(part.id);
+  updateArrow(part);
+}
+
+function updateArrow(part) {
+  if (!part || document.getElementById('startScreen').classList.contains('hidden') === false) {
+    document.getElementById('arrowIndicator').style.display = 'none';
+    arrowVisible = false;
+    return;
+  }
+  arrowVisible = true;
+  const el = document.getElementById('arrowIndicator');
+  el.style.display = 'block';
+  document.getElementById('arrowLabel').textContent = part.name;
+}
+
+function checkClick(event) {
+  if (document.getElementById('startScreen').classList.contains('hidden') === false) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(heliGroup.children, true);
+
+  for (const hit of intersects) {
+    let obj = hit.object;
+    while (obj.parent && obj.parent !== heliGroup) obj = obj.parent;
+    const name = obj.name;
+    const partIdx = HELI_PARTS.findIndex(p => p.id === name);
+    if (partIdx >= 0 && !foundParts.has(name)) {
+      foundPart(name, partIdx);
+      return;
+    }
+  }
+}
+
+function foundPart(partId, partIdx) {
+  foundParts.add(partId);
+  const part = HELI_PARTS[partIdx];
+  showNotification('Найдено: ' + part.name + ' — ' + part.desc, 'success');
+
+  const item = document.getElementById('part-item-' + partId);
+  if (item) item.classList.add('found');
+
+  const obj = heliGroup.getObjectByName(partId);
+  if (obj) {
+    if (obj.material) {
+      obj.material.emissive = new THREE.Color(0x00ff88);
+      obj.material.emissiveIntensity = 0.5;
+      setTimeout(() => { if (obj.material) obj.material.emissiveIntensity = 0; }, 2000);
+    }
+    obj.traverse(child => {
+      if (child.material && child.material.emissive) {
+        child.material.emissive = new THREE.Color(0x00ff88);
+        child.material.emissiveIntensity = 0.5;
+        setTimeout(() => { if (child.material) child.material.emissiveIntensity = 0; }, 2000);
+      }
+    });
+  }
+
+  updateProgress();
+
+  if (foundParts.size === HELI_PARTS.length) {
+    currentRound = 3;
+    updateProgress();
+    setTimeout(() => {
+      showGuide('quiz_intro');
+      currentRound = 3;
+      updateProgress();
+      setTimeout(startQuiz, 2000);
+    }, 2500);
+  } else {
+    currentPartIndex = HELI_PARTS.findIndex(p => !foundParts.has(p.id));
+    if (currentPartIndex >= 0) {
+      setTimeout(() => highlightCurrentPart(), 1500);
+    }
+  }
+}
+
+function startQuiz() {
+  currentRound = 3;
+  updateProgress();
+  document.getElementById('arrowIndicator').style.display = 'none';
+  arrowVisible = false;
+  quizIndex = 0;
+  quizScore = 0;
+  showQuizQuestion();
+}
+
+function showQuizQuestion() {
+  if (quizIndex >= HELI_PARTS.length) {
+    finishQuiz();
+    return;
+  }
+  const part = HELI_PARTS[quizIndex];
+  const overlay = document.getElementById('quizOverlay');
+  overlay.classList.add('active');
+  document.getElementById('quizTitle').textContent = 'Викторина — Вопрос ' + (quizIndex + 1) + '/' + HELI_PARTS.length;
+  document.getElementById('quizQuestion').textContent = part.quiz.question;
+  document.getElementById('quizScore').textContent = 'Правильных ответов: ' + quizScore + '/' + quizIndex;
+  document.getElementById('quizNext').style.display = 'none';
+
+  const optionsEl = document.getElementById('quizOptions');
+  optionsEl.innerHTML = '';
+  part.quiz.options.forEach((opt, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'quiz-option';
+    btn.textContent = String.fromCharCode(65 + i) + ') ' + opt;
+    btn.onclick = () => answerQuiz(i, part.quiz.correct);
+    optionsEl.appendChild(btn);
+  });
+}
+
+function answerQuiz(selected, correct) {
+  const options = document.querySelectorAll('.quiz-option');
+  options.forEach((opt, i) => {
+    opt.onclick = null;
+    if (i === correct) opt.classList.add('correct');
+    if (i === selected && selected !== correct) opt.classList.add('wrong');
+  });
+  if (selected === correct) quizScore++;
+  document.getElementById('quizScore').textContent = 'Правильных ответов: ' + quizScore + '/' + (quizIndex + 1);
+  document.getElementById('quizNext').style.display = 'inline-block';
+}
+
+function nextQuizQuestion() {
+  quizIndex++;
+  showQuizQuestion();
+}
+
+function finishQuiz() {
+  document.getElementById('quizOverlay').classList.remove('active');
+  currentRound = 4;
+  updateProgress();
+
+  const pct = Math.round((quizScore / HELI_PARTS.length) * 100);
+  let rank;
+  if (pct >= 90) rank = 'Мастер вертолётостроения';
+  else if (pct >= 70) rank = 'Пилот-инструктор';
+  else if (pct >= 50) rank = 'Пilot';
+  else rank = 'Стажёр';
+
+  document.getElementById('finalParts').textContent = 'Деталей найдено: ' + foundParts.size + '/' + HELI_PARTS.length;
+  document.getElementById('finalScore').textContent = quizScore + '/' + HELI_PARTS.length;
+  document.getElementById('finalRank').textContent = 'Звание: ' + rank + ' (' + pct + '%)';
+
+  setTimeout(() => {
+    document.getElementById('finalScreen').classList.add('active');
+  }, 1000);
+}
+
+function setView(view) {
+  autoRotate = false;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  switch(view) {
+    case 'auto': autoRotate = true; break;
+    case 'front': targetCameraPos = new THREE.Vector3(0, 1, 10); break;
+    case 'back': targetCameraPos = new THREE.Vector3(0, 1, -10); break;
+    case 'left': targetCameraPos = new THREE.Vector3(-10, 2, 0); break;
+    case 'right': targetCameraPos = new THREE.Vector3(10, 2, 0); break;
+    case 'top': targetCameraPos = new THREE.Vector3(0, 12, 0.1); break;
+    case 'cabin': targetCameraPos = new THREE.Vector3(0.8, 1.2, 3.5); targetLookAt = new THREE.Vector3(0, 0.3, 0.5); break;
+  }
+}
+
+function focusOnPart(partId) {
+  const part = HELI_PARTS.find(p => p.id === partId);
+  if (!part) return;
+  autoRotate = false;
+  const p = part.position;
+  const dir = new THREE.Vector3(p[0], p[1] + 2, p[2]).normalize();
+  targetCameraPos = new THREE.Vector3(
+    p[0] + dir.x * 4,
+    Math.max(p[1] + 2, 1.5),
+    p[2] + dir.z * 4
+  );
+  targetLookAt = new THREE.Vector3(p[0], p[1], p[2]);
+
+  const obj = heliGroup.getObjectByName(partId);
+  if (obj && obj.material) {
+    obj.material.emissive = new THREE.Color(0xff6a00);
+    obj.material.emissiveIntensity = 0.4;
+    setTimeout(() => { if (obj.material) obj.material.emissiveIntensity = 0; }, 3000);
+  }
+  if (obj) {
+    obj.traverse(child => {
+      if (child.material && child.material.emissive) {
+        child.material.emissive = new THREE.Color(0xff6a00);
+        child.material.emissiveIntensity = 0.4;
+        setTimeout(() => { if (child.material) child.material.emissiveIntensity = 0; }, 3000);
+      }
+    });
+  }
+
+  const idx = HELI_PARTS.findIndex(p2 => p2.id === partId);
+  if (idx >= 0) {
+    currentPartIndex = idx;
+    highlightCurrentPart();
+  }
+}
+
+function toggleExplode() {
+  exploded = !exploded;
+  const factor = exploded ? 1.6 : 1;
+  HELI_PARTS.forEach(part => {
+    const obj = heliGroup.getObjectByName(part.id);
+    if (obj) {
+      const tp = part.position;
+      if (exploded) {
+        obj.userData.savedPos = obj.position.clone();
+        obj.position.x = tp[0] * factor;
+        obj.position.y = tp[1] * factor;
+        obj.position.z = tp[2] * factor;
+      } else if (obj.userData.savedPos) {
+        obj.position.copy(obj.userData.savedPos);
+      }
+    }
+  });
+}
+
+function showNotification(text, type) {
+  const el = document.getElementById('notification');
+  el.textContent = text;
+  el.className = 'notification ' + type + ' show';
+  setTimeout(() => { el.className = 'notification'; }, 4000);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t = clock.getElapsedTime();
+
+  if (autoRotate) {
+    const radius = 9;
+    camera.position.x = Math.sin(t * 0.15) * radius;
+    camera.position.z = Math.cos(t * 0.15) * radius;
+    camera.position.y = 3 + Math.sin(t * 0.1) * 1;
+    camera.lookAt(0, 0, 0);
+  } else if (targetCameraPos) {
+    camera.position.lerp(targetCameraPos, 0.03);
+    camera.lookAt(targetLookAt);
+    if (camera.position.distanceTo(targetCameraPos) < 0.1) targetCameraPos = null;
+  }
+
+  if (mainRotorMesh) {
+    mainRotorMesh.rotation.y += dt * 15;
+  }
+  if (tailRotorMesh) {
+    tailRotorMesh.rotation.z += dt * 40;
+  }
+
+  heliGroup.position.y = Math.sin(t * 2) * 0.05;
+  heliGroup.rotation.z = Math.sin(t * 1.5) * 0.008;
+
+  if (arrowVisible && currentPartIndex < HELI_PARTS.length) {
+    const part = HELI_PARTS[currentPartIndex];
+    const worldPos = new THREE.Vector3(...part.position);
+    heliGroup.localToWorld(worldPos);
+    worldPos.project(camera);
+    const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-worldPos.y * 0.5 + 0.5) * window.innerHeight;
+    const el = document.getElementById('arrowIndicator');
+    el.style.left = x + 'px';
+    el.style.top = (y - 50) + 'px';
+    el.style.opacity = 0.5 + Math.sin(t * 4) * 0.5;
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+document.getElementById('canvas3d').addEventListener('click', checkClick);
+
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+let cameraTheta = 0;
+let cameraPhi = 0.5;
+let cameraRadius = 9;
+
+document.addEventListener('mousedown', (e) => {
+  if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
+    isDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    autoRotate = false;
+    targetCameraPos = null;
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  cameraTheta -= dx * 0.005;
+  cameraPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, cameraPhi - dy * 0.005));
+  prevMouse = { x: e.clientX, y: e.clientY };
+
+  camera.position.x = Math.sin(cameraTheta) * Math.cos(cameraPhi) * cameraRadius;
+  camera.position.y = Math.sin(cameraPhi) * cameraRadius;
+  camera.position.z = Math.cos(cameraTheta) * Math.cos(cameraPhi) * cameraRadius;
+  camera.lookAt(0, 0, 0);
+});
+
+document.addEventListener('mouseup', () => { isDragging = false; });
+
+document.addEventListener('wheel', (e) => {
+  cameraRadius = Math.max(4, Math.min(25, cameraRadius + e.deltaY * 0.01));
+});
+
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' && currentPartIndex < HELI_PARTS.length - 1) {
+    currentPartIndex++;
+    highlightCurrentPart();
+  } else if (e.key === 'ArrowLeft' && currentPartIndex > 0) {
+    currentPartIndex--;
+    highlightCurrentPart();
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    if (currentPartIndex < HELI_PARTS.length) {
+      focusOnPart(HELI_PARTS[currentPartIndex].id);
+    }
+  } else if (e.key === 'r' || e.key === 'R') {
+    autoRotate = !autoRotate;
+  }
+});
+
+initScene();
+animate();
+</script>
+</body>
+</html>
