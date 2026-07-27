@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PILOT HUD — шлем пилота</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; cursor: none; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+#ui-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10;
+}
+#controls {
+  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 20; pointer-events: all;
+}
+.ctrl-btn {
+  background: rgba(0,255,0,0.08); border: 1px solid rgba(0,255,0,0.3);
+  color: rgba(0,255,0,0.7); padding: 6px 14px; font-size: 11px;
+  font-family: 'Courier New', monospace; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.ctrl-btn:hover { background: rgba(0,255,0,0.2); border-color: rgba(0,255,0,0.6); }
+.ctrl-btn.active { background: rgba(0,255,0,0.25); border-color: #0f0; color: #0f0; }
+#start-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: #000; z-index: 100; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; cursor: pointer;
+}
+#start-screen h1 {
+  color: #0f0; font-size: 28px; letter-spacing: 8px; text-transform: uppercase;
+  animation: pulse 2s ease-in-out infinite;
+}
+#start-screen p { color: rgba(0,255,0,0.4); margin-top: 20px; font-size: 13px; letter-spacing: 3px; }
+@keyframes pulse { 0%,100%{ opacity:0.6 } 50%{ opacity:1 } }
+#flash {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: #fff; opacity: 0; pointer-events: none; z-index: 15;
+  transition: opacity 0.05s;
+}
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>PILOT HUD</h1>
+  <p>[ НАЖМИТЕ ДЛЯ ЗАПУСКА ]</p>
+</div>
+
+<canvas id="scene"></canvas>
+<canvas id="ui-overlay"></canvas>
+<div id="flash"></div>
+
+<div id="controls">
+  <button class="ctrl-btn active" onclick="setFilter(0)">VISUAL</button>
+  <button class="ctrl-btn" onclick="setFilter(1)">NIGHT</button>
+  <button class="ctrl-btn" onclick="setFilter(2)">THERMAL</button>
+  <button class="ctrl-btn" onclick="setFilter(3)">INFRARED</button>
+  <button class="ctrl-btn" onclick="toggleZoom()">ZOOM</button>
+  <button class="ctrl-btn" onclick="toggleDim()">DIM</button>
+</div>
+
+<script>
+const scene = document.getElementById('scene');
+const sctx = scene.getContext('2d');
+const ui = document.getElementById('ui-overlay');
+const uctx = ui.getContext('2d');
+const flash = document.getElementById('flash');
+
+let W, H;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  scene.width = W; scene.height = H;
+  ui.width = W; ui.height = H;
+}
+resize();
+window.addEventListener('resize', resize);
+
+let started = false;
+document.getElementById('start-screen').addEventListener('click', () => {
+  started = true;
+  document.getElementById('start-screen').style.display = 'none';
+  initAudio();
+});
+
+// --- STATE ---
+let filter = 0; // 0=visual, 1=night, 2=thermal, 3=infrared
+let zoomed = false;
+let dimmed = false;
+let dimLevel = 0;
+let time = 0;
+let mouseX = W/2, mouseY = H/2;
+let shooting = false;
+let shootCooldown = 0;
+let score = 0;
+let kills = 0;
+let totalTargets = 0;
+let cameraShake = { x: 0, y: 0, intensity: 0 };
+let lockOn = null;
+let lockTimer = 0;
+
+function setFilter(f) {
+  filter = f;
+  document.querySelectorAll('.ctrl-btn').forEach((b, i) => {
+    if (i < 4) b.classList.toggle('active', i === f);
+  });
+}
+function toggleZoom() {
+  zoomed = !zoomed;
+  document.querySelectorAll('.ctrl-btn')[4].classList.toggle('active', zoomed);
+}
+function toggleDim() {
+  dimmed = !dimmed;
+  document.querySelectorAll('.ctrl-btn')[5].classList.toggle('active', dimmed);
+}
+
+// --- AUDIO ---
+let audioCtx;
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playSound(freq, dur, type, vol) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol || 0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+function playShoot() { playSound(120, 0.15, 'sawtooth', 0.12); playSound(60, 0.2, 'square', 0.06); }
+function playHit() { playSound(800, 0.1, 'sine', 0.06); playSound(1200, 0.08, 'sine', 0.04); }
+function playLock() { playSound(600, 0.05, 'sine', 0.05); playSound(900, 0.05, 'sine', 0.05); }
+function playAlarm() { playSound(400, 0.15, 'square', 0.04); }
+function playKill() { playSound(1500, 0.2, 'sine', 0.07); playSound(2000, 0.15, 'sine', 0.05); }
+
+// --- WORLD ---
+const groundTiles = [];
+for (let i = 0; i < 200; i++) {
+  groundTiles.push({
+    x: (Math.random() - 0.5) * 4000,
+    z: Math.random() * 3000 + 200,
+    type: Math.random()
+  });
+}
+
+// Targets
+let targets = [];
+const TARGET_TYPES = [
+  { name: 'vehicle', w: 60, h: 25, speed: 1.5, hp: 3, score: 100, isFriendly: false },
+  { name: 'trooper', w: 18, h: 40, speed: 0.8, hp: 1, score: 50, isFriendly: false },
+  { name: 'apc', w: 80, h: 35, speed: 0.6, hp: 5, score: 200, isFriendly: false },
+  { name: 'helicopter', w: 50, h: 30, speed: 2, hp: 4, score: 300, isFriendly: false },
+  { name: 'civilian', w: 20, h: 38, speed: 0.5, hp: 1, score: -500, isFriendly: true },
+  { name: 'ambulance', w: 55, h: 28, speed: 0.7, hp: 2, score: -300, isFriendly: true },
+];
+
+function spawnTarget() {
+  const t = TARGET_TYPES[Math.floor(Math.random() * TARGET_TYPES.length)];
+  const side = Math.random() > 0.5 ? -1 : 1;
+  targets.push({
+    ...t,
+    x: side * (W * 0.6 + Math.random() * 400),
+    z: 300 + Math.random() * 2500,
+    baseX: 0, baseZ: 0,
+    hp: t.hp,
+    maxHp: t.hp,
+    angle: Math.random() * Math.PI * 2,
+    bobOffset: Math.random() * Math.PI * 2,
+    detected: false,
+    locked: false,
+    blinkTimer: 0,
+    trail: [],
+    identified: false,
+    idTimer: 0
+  });
+  totalTargets++;
+}
+for (let i = 0; i < 12; i++) spawnTarget();
+
+// --- PARTICLES ---
+let particles = [];
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+      life: 1, decay: 0.02 + Math.random()*0.03,
+      size: 1 + Math.random()*3, color
+    });
+  }
+}
+
+// --- PROJECTILES ---
+let projectiles = [];
+function shoot() {
+  if (shootCooldown > 0) return;
+  shootCooldown = 12;
+  shooting = true;
+  cameraShake.intensity = 5;
+  playShoot();
+
+  const cx = W/2, cy = H/2;
+  const spread = zoomed ? 1 : 3;
+  const dx = (mouseX - cx) * 0.3 + (Math.random()-0.5)*spread;
+  const dy = (mouseY - cy) * 0.3 + (Math.random()-0.5)*spread;
+  projectiles.push({ x: cx + dx, y: cy + dy, life: 1, targetX: mouseX, targetY: mouseY });
+
+  setTimeout(() => shooting = false, 80);
+
+  // Hit detection
+  targets.forEach(t => {
+    const proj = worldToScreen(t);
+    if (proj.x === null) return;
+    const dist = Math.hypot(mouseX - proj.x, mouseY - proj.y);
+    const hitR = (t.w * proj.scale) * (zoomed ? 0.6 : 1);
+    if (dist < hitR) {
+      t.hp--;
+      t.blinkTimer = 10;
+      spawnParticles(proj.x, proj.y, t.isFriendly ? '#ff0' : '#f00', 8);
+      if (t.hp <= 0) {
+        spawnParticles(proj.x, proj.y, '#ff0', 20);
+        if (t.isFriendly) { playAlarm(); } else { playKill(); }
+        score += t.score;
+        if (!t.isFriendly) kills++;
+        t.x = -9999;
+      } else { playHit(); }
+    }
+  });
+}
+
+// --- PROJ MATH ---
+function worldToScreen(t) {
+  const perspective = 400;
+  const scale = perspective / (t.z + perspective);
+  const screenX = W/2 + (t.x * scale * 2);
+  const screenY = H * 0.7 - (t.z * scale * 0.15) + 50 * scale;
+  return { x: screenX, y: screenY, scale, z: t.z };
+}
+
+// --- EVENTS ---
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+document.addEventListener('mousedown', e => { if (started) shoot(); });
+document.addEventListener('keydown', e => {
+  if (e.key === '1') setFilter(0);
+  if (e.key === '2') setFilter(1);
+  if (e.key === '3') setFilter(2);
+  if (e.key === '4') setFilter(3);
+  if (e.key === 'z') toggleZoom();
+  if (e.key === 'x') toggleDim();
+});
+
+// --- UPDATE ---
+function update() {
+  time += 0.016;
+  if (shootCooldown > 0) shootCooldown--;
+
+  // Camera shake decay
+  if (cameraShake.intensity > 0) {
+    cameraShake.x = (Math.random()-0.5) * cameraShake.intensity;
+    cameraShake.y = (Math.random()-0.5) * cameraShake.intensity;
+    cameraShake.intensity *= 0.9;
+  }
+
+  // Dim
+  if (dimmed) dimLevel = Math.min(dimLevel + 0.02, 0.4);
+  else dimLevel = Math.max(dimLevel - 0.02, 0);
+
+  // Targets
+  targets.forEach(t => {
+    t.x += Math.cos(t.angle) * t.speed;
+    t.z += Math.sin(t.angle) * t.speed * 0.3;
+    t.angle += (Math.random()-0.5) * 0.03;
+
+    if (t.z < 100) { t.z = 100; t.angle = Math.random() * Math.PI; }
+    if (t.z > 3000) { t.z = 100; t.x = (Math.random()-0.5)*2000; }
+    if (Math.abs(t.x) > 2000) t.angle = Math.atan2(Math.sin(t.angle), -Math.cos(t.angle));
+
+    // Identification
+    if (!t.identified) {
+      t.idTimer += 0.016;
+      if (t.idTimer > 1.5) t.identified = true;
+    }
+    if (t.blinkTimer > 0) t.blinkTimer--;
+
+    // Trail
+    const sp = worldToScreen(t);
+    if (sp.x !== null) {
+      t.trail.push({ x: sp.x, y: sp.y, life: 1 });
+      if (t.trail.length > 15) t.trail.shift();
+    }
+    t.trail.forEach(p => p.life -= 0.06);
+    t.trail = t.trail.filter(p => p.life > 0);
+  });
+
+  // Remove dead
+  targets = targets.filter(t => t.hp > 0);
+  while (targets.length < 15) spawnTarget();
+
+  // Lock on detection
+  let closest = null, closestDist = 100;
+  targets.forEach(t => {
+    const sp = worldToScreen(t);
+    if (sp.x === null) return;
+    const d = Math.hypot(mouseX - sp.x, mouseY - sp.y);
+    if (d < closestDist && !t.isFriendly) { closest = t; closestDist = d; }
+  });
+  if (closest) {
+    if (lockOn === closest) lockTimer += 0.016;
+    else { lockOn = closest; lockTimer = 0; }
+    if (lockTimer > 0.8 && lockTimer < 0.9) playLock();
+  } else { lockOn = null; lockTimer = 0; }
+
+  // Particles
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= p.decay; });
+  particles = particles.filter(p => p.life > 0);
+}
+
+// --- RENDER ---
+function getColor(r, g, b, a) {
+  if (filter === 0) return `rgba(${r},${g},${b},${a||1})`;
+  const gray = r*0.3 + g*0.59 + b*0.11;
+  if (filter === 1) return `rgba(0,${gray*1.6|0},0,${a||1})`;
+  if (filter === 2) {
+    const heat = gray / 255;
+    const ri = heat > 0.6 ? 255 : heat * 2 * 255;
+    const bi = heat < 0.3 ? 255 : (1-heat)*1.4*255;
+    return `rgba(${ri|0},0,${bi|0},${a||1})`;
+  }
+  if (filter === 3) return `rgba(${gray*1.2|0},${gray*0.3|0},${gray*0.1|0},${a||1})`;
+  return `rgba(${r},${g},${b},${a||1})`;
+}
+
+function renderScene() {
+  sctx.save();
+  sctx.translate(cameraShake.x, cameraShake.y);
+
+  // Sky
+  const grad = sctx.createLinearGradient(0, 0, 0, H);
+  if (filter === 0) { grad.addColorStop(0, '#0a0e1a'); grad.addColorStop(0.5, '#151e33'); grad.addColorStop(1, '#1a1a2e'); }
+  else if (filter === 1) { grad.addColorStop(0, '#001100'); grad.addColorStop(0.5, '#002200'); grad.addColorStop(1, '#001800'); }
+  else if (filter === 2) { grad.addColorStop(0, '#100010'); grad.addColorStop(0.5, '#200020'); grad.addColorStop(1, '#180018'); }
+  else { grad.addColorStop(0, '#1a0a00'); grad.addColorStop(0.5, '#2a1505'); grad.addColorStop(1, '#1f1000'); }
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, W, H);
+
+  // Stars (visual mode only)
+  if (filter === 0) {
+    for (let i = 0; i < 80; i++) {
+      const sx = (i * 137.5 + time * 2) % W;
+      const sy = (i * 73.7) % (H * 0.5);
+      const br = 0.3 + Math.sin(time * 2 + i) * 0.2;
+      sctx.fillStyle = `rgba(200,220,255,${br})`;
+      sctx.fillRect(sx, sy, 1, 1);
+    }
+  }
+
+  // Ground
+  const groundY = H * 0.72;
+  const groundGrad = sctx.createLinearGradient(0, groundY, 0, H);
+  if (filter === 0) { groundGrad.addColorStop(0, '#1a2a1a'); groundGrad.addColorStop(1, '#0a150a'); }
+  else if (filter === 1) { groundGrad.addColorStop(0, '#002a00'); groundGrad.addColorStop(1, '#001500'); }
+  else if (filter === 2) { groundGrad.addColorStop(0, '#100510'); groundGrad.addColorStop(1, '#080008'); }
+  else { groundGrad.addColorStop(0, '#2a1500'); groundGrad.addColorStop(1, '#150a00'); }
+  sctx.fillStyle = groundGrad;
+  sctx.fillRect(0, groundY, W, H - groundY);
+
+  // Grid lines on ground
+  sctx.strokeStyle = filter === 0 ? 'rgba(0,255,100,0.06)' : filter === 1 ? 'rgba(0,255,0,0.08)' : 'rgba(255,100,0,0.06)';
+  sctx.lineWidth = 1;
+  for (let i = 0; i < 20; i++) {
+    const y = groundY + i * 15 + (time * 20) % 15;
+    const perspective = (y - groundY) / (H - groundY);
+    sctx.globalAlpha = 0.3 + perspective * 0.7;
+    sctx.beginPath();
+    sctx.moveTo(0, y); sctx.lineTo(W, y);
+    sctx.stroke();
+  }
+  sctx.globalAlpha = 1;
+
+  // Targets
+  targets.forEach(t => {
+    const sp = worldToScreen(t);
+    if (sp.x === null || sp.x < -100 || sp.x > W+100 || sp.y < -100 || sp.y > H+100) return;
+    if (sp.z < 50 || sp.z > 3500) return;
+
+    const sw = t.w * sp.scale;
+    const sh = t.h * sp.scale;
+
+    // Trail
+    t.trail.forEach(p => {
+      sctx.fillStyle = t.isFriendly ? `rgba(0,150,0,${p.life*0.3})` : `rgba(255,50,0,${p.life*0.2})`;
+      sctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+    });
+
+    // Shadow
+    sctx.fillStyle = 'rgba(0,0,0,0.3)';
+    sctx.fillRect(sp.x - sw/2 + 3, sp.y + sh/2, sw, 3);
+
+    // Body
+    let bodyColor;
+    if (t.isFriendly) {
+      bodyColor = t.blinkTimer > 0 ? '#fff' : (filter === 0 ? '#2a6a2a' : filter === 1 ? '#00ff00' : filter === 2 ? '#0088ff' : '#ff8800');
+    } else {
+      bodyColor = t.blinkTimer > 0 ? '#f00' : (filter === 0 ? '#553333' : filter === 1 ? '#004400' : filter === 2 ? '#880000' : '#883300');
+    }
+    sctx.fillStyle = bodyColor;
+    sctx.fillRect(sp.x - sw/2, sp.y - sh/2, sw, sh);
+
+    // Details
+    sctx.fillStyle = t.isFriendly ? 'rgba(0,255,0,0.3)' : 'rgba(255,0,0,0.3)';
+    sctx.fillRect(sp.x - sw/2 + sw*0.2, sp.y - sh*0.3, sw*0.3, sh*0.3);
+
+    // HP bar
+    if (t.hp < t.maxHp) {
+      const hpW = sw * 1.2;
+      sctx.fillStyle = 'rgba(0,0,0,0.5)';
+      sctx.fillRect(sp.x - hpW/2, sp.y - sh/2 - 8*sp.scale, hpW, 3);
+      sctx.fillStyle = t.hp/t.maxHp > 0.5 ? '#0f0' : t.hp/t.maxHp > 0.25 ? '#ff0' : '#f00';
+      sctx.fillRect(sp.x - hpW/2, sp.y - sh/2 - 8*sp.scale, hpW * (t.hp/t.maxHp), 3);
+    }
+
+    // IFF tag
+    if (t.identified) {
+      sctx.font = `${Math.max(8, 11*sp.scale|0)}px Courier New`;
+      sctx.textAlign = 'center';
+      sctx.fillStyle = t.isFriendly ? 'rgba(0,255,0,0.8)' : 'rgba(255,60,0,0.8)';
+      const tag = t.isFriendly ? `[FRIEND: ${t.name.toUpperCase()}]` : `[HOSTILE: ${t.name.toUpperCase()}]`;
+      sctx.fillText(tag, sp.x, sp.y - sh/2 - 12*sp.scale);
+
+      // Distance
+      sctx.fillStyle = 'rgba(0,255,0,0.5)';
+      sctx.fillText(`${t.z|0}m`, sp.x, sp.y + sh/2 + 14*sp.scale);
+    } else {
+      sctx.fillStyle = 'rgba(255,255,0,0.6)';
+      sctx.font = `${Math.max(8, 10*sp.scale|0)}px Courier New`;
+      sctx.textAlign = 'center';
+      sctx.fillText('SCANNING...', sp.x, sp.y - sh/2 - 10*sp.scale);
+    }
+  });
+
+  // Projectiles
+  projectiles.forEach(p => {
+    const trail = 20;
+    const dx = (p.targetX - W/2) / trail;
+    const dy = (p.targetY - H/2) / trail;
+    for (let i = 0; i < trail; i++) {
+      const px = W/2 + dx * i + (Math.random()-0.5)*2;
+      const py = H/2 + dy * i + (Math.random()-0.5)*2;
+      const alpha = i / trail;
+      sctx.fillStyle = `rgba(255,200,50,${alpha * 0.6})`;
+      sctx.fillRect(px, py, 2, 2);
+    }
+  });
+
+  // Particles
+  particles.forEach(p => {
+    sctx.globalAlpha = p.life;
+    sctx.fillStyle = p.color;
+    sctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+  });
+  sctx.globalAlpha = 1;
+
+  sctx.restore();
+}
+
+function renderHUD() {
+  uctx.clearRect(0, 0, W, H);
+  const cx = W/2, cy = H/2;
+
+  uctx.save();
+  uctx.translate(cameraShake.x, cameraShake.y);
+
+  // Helmet visor frame
+  const vGrad = uctx.createRadialGradient(cx, cy, Math.min(W,H)*0.25, cx, cy, Math.max(W,H)*0.7);
+  vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vGrad.addColorStop(0.7, 'rgba(0,0,0,0.3)');
+  vGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
+  uctx.fillStyle = vGrad;
+  uctx.fillRect(0, 0, W, H);
+
+  // Helmet shape
+  uctx.strokeStyle = 'rgba(40,40,40,0.6)';
+  uctx.lineWidth = 8;
+  uctx.beginPath();
+  uctx.ellipse(cx, cy, W*0.48, H*0.48, 0, 0, Math.PI*2);
+  uctx.stroke();
+
+  // Inner helmet rim
+  uctx.strokeStyle = 'rgba(60,60,60,0.3)';
+  uctx.lineWidth = 3;
+  uctx.beginPath();
+  uctx.ellipse(cx, cy, W*0.46, H*0.46, 0, 0, Math.PI*2);
+  uctx.stroke();
+
+  // Visor reflection
+  uctx.fillStyle = 'rgba(100,150,200,0.02)';
+  uctx.beginPath();
+  uctx.ellipse(cx - W*0.08, cy - H*0.12, W*0.25, H*0.15, -0.3, 0, Math.PI*2);
+  uctx.fill();
+
+  // Scanlines
+  uctx.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let y = 0; y < H; y += 3) {
+    uctx.fillRect(0, y, W, 1);
+  }
+
+  // Noise
+  const imgData = uctx.getImageData(0, 0, W, H);
+  const noiseLevel = filter === 1 ? 12 : filter === 2 ? 8 : filter === 3 ? 10 : 5;
+  for (let i = 0; i < imgData.data.length; i += 16) {
+    const noise = (Math.random() - 0.5) * noiseLevel;
+    imgData.data[i] += noise;
+    imgData.data[i+1] += noise;
+    imgData.data[i+2] += noise;
+  }
+  uctx.putImageData(imgData, 0, 0);
+
+  // Dimming overlay
+  if (dimLevel > 0) {
+    uctx.fillStyle = `rgba(0,0,0,${dimLevel})`;
+    uctx.fillRect(0, 0, W, H);
+  }
+
+  // --- CENTER RETICLE ---
+  const retSize = zoomed ? 35 : 25;
+
+  // Outer ring
+  uctx.strokeStyle = lockOn ? `rgba(255,0,0,${0.6 + Math.sin(time*8)*0.4})` : 'rgba(0,255,0,0.6)';
+  uctx.lineWidth = 1.5;
+  uctx.beginPath();
+  uctx.arc(cx, cy, retSize + 5, 0, Math.PI*2);
+  uctx.stroke();
+
+  // Rotating ring
+  uctx.beginPath();
+  uctx.arc(cx, cy, retSize + 12, time*2, time*2 + Math.PI*1.2);
+  uctx.stroke();
+  uctx.beginPath();
+  uctx.arc(cx, cy, retSize + 12, time*2 + Math.PI, time*2 + Math.PI*2.2);
+  uctx.stroke();
+
+  // Crosshair
+  uctx.strokeStyle = lockOn ? '#f00' : 'rgba(0,255,0,0.8)';
+  uctx.lineWidth = 1;
+  const ch = retSize;
+  // H lines
+  uctx.beginPath(); uctx.moveTo(cx - ch, cy); uctx.lineTo(cx - retSize*0.4, cy); uctx.stroke();
+  uctx.beginPath(); uctx.moveTo(cx + retSize*0.4, cy); uctx.lineTo(cx + ch, cy); uctx.stroke();
+  // V lines
+  uctx.beginPath(); uctx.moveTo(cx, cy - ch); uctx.lineTo(cx, cy - retSize*0.4); uctx.stroke();
+  uctx.beginPath(); uctx.moveTo(cx, cy + retSize*0.4); uctx.lineTo(cx, cy + ch); uctx.stroke();
+
+  // Center dot
+  uctx.fillStyle = lockOn ? '#f00' : '#0f0';
+  uctx.beginPath();
+  uctx.arc(cx, cy, 2, 0, Math.PI*2);
+  uctx.fill();
+
+  // Lock-on bracket
+  if (lockOn && lockTimer > 0.3) {
+    const lsp = worldToScreen(lockOn);
+    if (lsp.x !== null) {
+      const bSize = 30 * lsp.scale;
+      const lockAlpha = Math.min(lockTimer / 1.2, 1);
+      uctx.strokeStyle = `rgba(255,0,0,${lockAlpha * 0.8})`;
+      uctx.lineWidth = 2;
+
+      // Corner brackets
+      const corners = [
+        [-1,-1],[1,-1],[1,1],[-1,1]
+      ];
+      corners.forEach(([dx, dy]) => {
+        uctx.beginPath();
+        uctx.moveTo(lsp.x + dx*bSize, lsp.y + dy*bSize*0.6);
+        uctx.lineTo(lsp.x + dx*bSize, lsp.y + dy*bSize*0.6 + dy*-8);
+        uctx.lineTo(lsp.x + dx*bSize + dx*-8, lsp.y + dy*bSize*0.6 + dy*-8);
+        uctx.stroke();
+      });
+
+      // Lock text
+      if (lockTimer > 1.0) {
+        uctx.fillStyle = '#f00';
+        uctx.font = 'bold 14px Courier New';
+        uctx.textAlign = 'center';
+        uctx.fillText('MISSILE LOCK', lsp.x, lsp.y - bSize - 15);
+        uctx.fillText(`RNG: ${lockOn.z|0}m`, lsp.x, lsp.y + bSize*0.6 + 18);
+      }
+    }
+  }
+
+  // --- HUD DATA ---
+
+  // Top bar
+  const tbY = 35;
+  uctx.fillStyle = 'rgba(0,255,0,0.7)';
+  uctx.font = '12px Courier New';
+  uctx.textAlign = 'left';
+  uctx.fillText(`FILTER: ${['VISUAL','NIGHT VISION','THERMAL','INFRARED'][filter]}`, 30, tbY);
+  uctx.textAlign = 'right';
+  uctx.fillText(`TIME: ${formatTime(time)}`, W - 30, tbY);
+
+  // Compass
+  const compassY = 55;
+  uctx.textAlign = 'center';
+  uctx.font = '10px Courier New';
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  for (let i = 0; i < 32; i++) {
+    const angle = (i / 32) * Math.PI * 2 + time * 0.05;
+    const compassX = cx + Math.sin(angle) * 120;
+    const alpha = Math.max(0, 1 - Math.abs(Math.sin(angle)) * 0.8);
+    if (i % 4 === 0) {
+      uctx.fillStyle = `rgba(0,255,0,${alpha * 0.8})`;
+      uctx.font = '11px Courier New';
+      uctx.fillText(dirs[i/4], compassX, compassY);
+    } else {
+      uctx.fillStyle = `rgba(0,255,0,${alpha * 0.3})`;
+      uctx.fillRect(compassX, compassY - 3, 1, 6);
+    }
+  }
+
+  // Pitch ladder
+  uctx.strokeStyle = 'rgba(0,255,0,0.2)';
+  uctx.lineWidth = 1;
+  for (let i = -5; i <= 5; i++) {
+    const py = cy + i * 40;
+    uctx.beginPath();
+    uctx.moveTo(cx - 80, py);
+    uctx.lineTo(cx - 20, py);
+    uctx.stroke();
+    uctx.beginPath();
+    uctx.moveTo(cx + 20, py);
+    uctx.lineTo(cx + 80, py);
+    uctx.stroke();
+    if (i !== 0) {
+      uctx.fillStyle = 'rgba(0,255,0,0.3)';
+      uctx.font = '9px Courier New';
+      uctx.textAlign = 'right';
+      uctx.fillText(`${i*5}°`, cx - 85, py + 3);
+    }
+  }
+
+  // Left panel
+  const lx = 30;
+  uctx.fillStyle = 'rgba(0,255,0,0.6)';
+  uctx.font = '11px Courier New';
+  uctx.textAlign = 'left';
+  uctx.fillText('── SYSTEMS ──', lx, H*0.35);
+  uctx.fillStyle = 'rgba(0,255,0,0.5)';
+  uctx.fillText(`SCORE: ${score}`, lx, H*0.35 + 18);
+  uctx.fillText(`KILLS: ${kills}`, lx, H*0.35 + 34);
+  uctx.fillText(`TARGETS: ${targets.length}`, lx, H*0.35 + 50);
+  uctx.fillText(`ZOOM: ${zoomed ? 'ON' : 'OFF'}`, lx, H*0.35 + 66);
+
+  // Altitude
+  uctx.fillText(`ALT: 850m`, lx, H*0.35 + 90);
+  uctx.fillText(`SPD: 240kt`, lx, H*0.35 + 106);
+  uctx.fillText(`HEADING: ${(time*3%360)|0}°`, lx, H*0.35 + 122);
+
+  // Right panel
+  uctx.textAlign = 'right';
+  const rx = W - 30;
+  uctx.fillStyle = 'rgba(0,255,0,0.6)';
+  uctx.fillText('── WEAPONS ──', rx, H*0.35);
+  uctx.fillStyle = 'rgba(0,255,0,0.5)';
+  uctx.fillText('GUN: M61A2', rx, H*0.35 + 18);
+  uctx.fillText(`AMMO: ${Math.max(0, 3920 - totalTargets*30)}`, rx, H*0.35 + 34);
+  uctx.fillText(`ROUNDS: ${(time*8|0) % 6}`, rx, H*0.35 + 50);
+  uctx.fillText('MODE: MAN', rx, H*0.35 + 66);
+
+  // Weapon status bar
+  const ammoPct = Math.max(0, 1 - totalTargets * 0.02);
+  uctx.fillStyle = 'rgba(0,0,0,0.5)';
+  uctx.fillRect(rx - 100, H*0.35 + 74, 100, 6);
+  uctx.fillStyle = ammoPct > 0.5 ? 'rgba(0,255,0,0.6)' : ammoPct > 0.25 ? 'rgba(255,255,0,0.6)' : 'rgba(255,0,0,0.6)';
+  uctx.fillRect(rx - 100, H*0.35 + 74, 100 * ammoPct, 6);
+
+  // Bottom status
+  const bsY = H - 40;
+  uctx.textAlign = 'center';
+  uctx.fillStyle = 'rgba(0,255,0,0.4)';
+  uctx.font = '10px Courier New';
+  const threatLevel = targets.filter(t => !t.isFriendly && t.z < 500).length;
+  if (threatLevel > 2) {
+    uctx.fillStyle = `rgba(255,0,0,${0.5 + Math.sin(time*4)*0.3})`;
+    uctx.fillText('⚠ HIGH THREAT ZONE ⚠', cx, bsY);
+  } else if (threatLevel > 0) {
+    uctx.fillStyle = 'rgba(255,255,0,0.5)';
+    uctx.fillText('CONTACT — MONITORING', cx, bsY);
+  } else {
+    uctx.fillText('AREA CLEAR — PATROLLING', cx, bsY);
+  }
+
+  // IFF Legend
+  uctx.textAlign = 'left';
+  uctx.fillStyle = 'rgba(0,255,0,0.4)';
+  uctx.fillText('IFF:', 30, H - 60);
+  uctx.fillStyle = 'rgba(0,255,0,0.6)';
+  uctx.fillRect(30, H - 54, 8, 8);
+  uctx.fillStyle = 'rgba(0,255,0,0.4)';
+  uctx.fillText('FRIENDLY', 42, H - 47);
+  uctx.fillStyle = 'rgba(255,0,0,0.6)';
+  uctx.fillRect(120, H - 54, 8, 8);
+  uctx.fillStyle = 'rgba(255,0,0,0.4)';
+  uctx.fillText('HOSTILE', 132, H - 47);
+
+  // Filter-specific overlay effects
+  if (filter === 1) {
+    // Night vision glow
+    uctx.fillStyle = 'rgba(0,30,0,0.1)';
+    uctx.fillRect(0, 0, W, H);
+    // Green tint scanlines
+    for (let y = 0; y < H; y += 4) {
+      uctx.fillStyle = `rgba(0,${60+Math.sin(y*0.1+time*5)*20},0,0.05)`;
+      uctx.fillRect(0, y, W, 2);
+    }
+  } else if (filter === 2) {
+    // Thermal bloom
+    uctx.fillStyle = 'rgba(40,0,0,0.03)';
+    uctx.fillRect(0, 0, W, H);
+  } else if (filter === 3) {
+    uctx.fillStyle = 'rgba(20,5,0,0.05)';
+    uctx.fillRect(0, 0, W, H);
+  }
+
+  // Cross-shot flash
+  if (shooting) {
+    uctx.fillStyle = 'rgba(255,200,50,0.15)';
+    uctx.beginPath();
+    uctx.arc(cx, cy, 60, 0, Math.PI*2);
+    uctx.fill();
+  }
+
+  // Zoom overlay
+  if (zoomed) {
+    uctx.strokeStyle = 'rgba(0,255,0,0.3)';
+    uctx.lineWidth = 2;
+    uctx.strokeRect(cx - 150, cy - 120, 300, 240);
+    uctx.fillStyle = 'rgba(0,255,0,0.5)';
+    uctx.font = '10px Courier New';
+    uctx.textAlign = 'right';
+    uctx.fillText('2.5x', cx + 145, cy - 125);
+  }
+
+  // Flicker on damage
+  if (Math.random() < 0.01) {
+    uctx.fillStyle = `rgba(${Math.random()>0.5?255:0},0,0,0.05)`;
+    uctx.fillRect(0, 0, W, H);
+  }
+
+  uctx.restore();
+}
+
+function formatTime(t) {
+  const m = (t/60)|0;
+  const s = (t%60)|0;
+  return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+// --- LOOP ---
+function loop() {
+  if (!started) { requestAnimationFrame(loop); return; }
+  update();
+  renderScene();
+  renderHUD();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
