@@ -1355,139 +1355,111 @@ function updateHeliPhysics(dt){
 }
 
 function drawHeli3D(cx,cy,cz,cyaw,cpitch){
-  var s=project(droneX,droneY,droneZ,cx,cy,cz,cyaw,cpitch);
-  if(!s||s.z>150)return;
-  var sz=Math.max(4,18*FOV/s.z);
-  var vr=droneRoll*0.8;
-  var yr=droneYaw-cyaw;
-  X.save();X.translate(s.x,s.y);X.rotate(yr+vr);
   var ht=HELI_TYPES[heliType];
   var c=ht.color;
+  var s0=project(droneX,droneY,droneZ,cx,cy,cz,cyaw,cpitch);
+  if(!s0||s0.z>150)return;
 
-  if(heliType===0){
-    X.fillStyle=c;X.beginPath();X.ellipse(0,-sz*.05,sz*.1,sz*.22,0,0,Math.PI*2);X.fill();X.strokeStyle='#888';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.4;X.beginPath();X.ellipse(0,-sz*.18,sz*.07,sz*.08,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#555';X.fillRect(-sz*.03,sz*.12,sz*.06,sz*.35);
-    X.strokeStyle='#888';X.lineWidth=1;X.beginPath();X.moveTo(-sz*.01,sz*.45);X.lineTo(sz*.06,sz*.55);X.stroke();
-    X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.02);
-    X.beginPath();X.moveTo(-sz*.18,0);X.lineTo(-sz*.25,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.18,0);X.lineTo(sz*.25,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.25,-sz*.05);X.lineTo(-sz*.25,sz*.05);X.stroke();
-    X.beginPath();X.moveTo(sz*.25,-sz*.05);X.lineTo(sz*.25,sz*.05);X.stroke();
-  }else if(heliType===1){
-    X.fillStyle=c;X.beginPath();
-    X.ellipse(0,-sz*.05,sz*.12,sz*.25,0,0,Math.PI*2);X.fill();
-    X.strokeStyle='#999';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.35;X.beginPath();X.ellipse(0,-sz*.2,sz*.09,sz*.08,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#444';X.fillRect(-sz*.025,sz*.15,sz*.05,sz*.3);
-    X.strokeStyle='#777';X.lineWidth=1;X.beginPath();X.moveTo(-sz*.005,sz*.42);X.lineTo(sz*.05,sz*.5);X.stroke();
-    X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.02);
-    X.beginPath();X.moveTo(-sz*.2,0);X.lineTo(-sz*.28,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.2,0);X.lineTo(sz*.28,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.28,-sz*.04);X.lineTo(-sz*.28,sz*.04);X.stroke();
-    X.beginPath();X.moveTo(sz*.28,-sz*.04);X.lineTo(sz*.28,sz*.04);X.stroke();
-  }else if(heliType===2){
-    X.fillStyle=c;
-    X.fillRect(-sz*.18,-sz*.25,sz*.36,sz*.5);
-    X.fillStyle='#8a9a7a';X.fillRect(-sz*.18,sz*.15,sz*.36,sz*.1);
-    X.strokeStyle='#556';X.lineWidth=1.5;X.strokeRect(-sz*.18,-sz*.25,sz*.36,sz*.5);
-    X.fillStyle='#aaddff';X.globalAlpha=0.3;X.fillRect(-sz*.14,-sz*.22,sz*.28,sz*.1);X.globalAlpha=1;
-    X.fillStyle='#555';X.fillRect(-sz*.02,sz*.25,sz*.04,sz*.25);
-    X.fillStyle='#666';X.fillRect(-sz*.08,sz*.48,sz*.16,sz*.08);
-    X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.025);
-    X.beginPath();X.moveTo(-sz*.3,0);X.lineTo(-sz*.38,-sz*.04);X.stroke();
-    X.beginPath();X.moveTo(sz*.3,0);X.lineTo(sz*.38,-sz*.04);X.stroke();
-    X.beginPath();X.moveTo(-sz*.38,-sz*.06);X.lineTo(-sz*.38,sz*.06);X.stroke();
-    X.beginPath();X.moveTo(sz*.38,-sz*.06);X.lineTo(sz*.38,sz*.06);X.stroke();
-  }else if(heliType===4){
-    X.fillStyle=c;X.beginPath();
-    X.ellipse(0,-sz*.04,sz*.08,sz*.2,0,0,Math.PI*2);X.fill();
-    X.strokeStyle='#445';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.3;X.beginPath();X.ellipse(0,-sz*.16,sz*.06,sz*.06,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#334';X.fillRect(-sz*.02,sz*.12,sz*.04,sz*.28);
-    X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.015);
-    X.beginPath();X.moveTo(-sz*.16,0);X.lineTo(-sz*.22,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.16,0);X.lineTo(sz*.22,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.22,-sz*.03);X.lineTo(-sz*.22,sz*.03);X.stroke();
-    X.beginPath();X.moveTo(sz*.22,-sz*.03);X.lineTo(sz*.22,sz*.03);X.stroke();
-    X.strokeStyle='rgba(100,100,120,0.5)';X.lineWidth=1;
-    X.beginPath();X.moveTo(-sz*.06,sz*.06);X.lineTo(-sz*.12,sz*.12);X.stroke();
-    X.beginPath();X.moveTo(sz*.06,sz*.06);X.lineTo(sz*.12,sz*.12);X.stroke();
-  }else if(heliType===5){
-    X.fillStyle=c;
-    X.fillRect(-sz*.22,-sz*.3,sz*.44,sz*.6);
-    X.strokeStyle='#776';X.lineWidth=1.5;X.strokeRect(-sz*.22,-sz*.3,sz*.44,sz*.6);
-    X.fillStyle='#aaddff';X.globalAlpha=0.25;X.fillRect(-sz*.18,-sz*.26,sz*.36,sz*.12);X.globalAlpha=1;
-    X.fillStyle='#555';X.fillRect(-sz*.015,sz*.3,sz*.03,sz*.3);
-    X.fillStyle='#666';X.fillRect(-sz*.06,sz*.58,sz*.12,sz*.06);
-    X.strokeStyle='#777';X.lineWidth=Math.max(1,sz*0.025);
-    X.beginPath();X.moveTo(-sz*.35,-sz*.02);X.lineTo(-sz*.42,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.35,-sz*.02);X.lineTo(sz*.42,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.42,-sz*.05);X.lineTo(-sz*.42,sz*.05);X.stroke();
-    X.beginPath();X.moveTo(sz*.42,-sz*.05);X.lineTo(sz*.42,sz*.05);X.stroke();
-    X.strokeStyle='#556';X.lineWidth=1;
-    X.beginPath();X.moveTo(-sz*.08,-sz*.32);X.lineTo(sz*.08,-sz*.32);X.stroke();
-    X.beginPath();X.moveTo(-sz*.08,-sz*.32);X.lineTo(-sz*.08,-sz*.28);X.stroke();
-    X.beginPath();X.moveTo(sz*.08,-sz*.32);X.lineTo(sz*.08,-sz*.28);X.stroke();
-  }else if(heliType===6){
-    X.fillStyle=c;X.beginPath();
-    X.ellipse(0,-sz*.03,sz*.07,sz*.18,0,0,Math.PI*2);X.fill();
-    X.strokeStyle='#6a8a7a';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.4;X.beginPath();X.ellipse(0,-sz*.14,sz*.05,sz*.05,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#445';X.fillRect(-sz*.015,sz*.1,sz*.03,sz*.22);
-    X.strokeStyle='#556';X.lineWidth=Math.max(1,sz*0.015);
-    X.beginPath();X.moveTo(-sz*.12,0);X.lineTo(-sz*.18,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.12,0);X.lineTo(sz*.18,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.18,-sz*.02);X.lineTo(-sz*.18,sz*.02);X.stroke();
-    X.beginPath();X.moveTo(sz*.18,-sz*.02);X.lineTo(sz*.18,sz*.02);X.stroke();
-  }else if(heliType===7){
-    X.fillStyle=c;X.beginPath();
-    X.ellipse(0,-sz*.04,sz*.1,sz*.23,0,0,Math.PI*2);X.fill();
-    X.strokeStyle='#bbb';X.lineWidth=1;X.stroke();
-    X.fillStyle='#cce';X.globalAlpha=0.4;X.beginPath();X.ellipse(0,-sz*.18,sz*.08,sz*.07,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#556';X.fillRect(-sz*.025,sz*.14,sz*.05,sz*.3);
-    X.beginPath();X.arc(0,sz*.47,sz*.03,0,Math.PI*2);X.fillStyle='#667';X.fill();X.strokeStyle='#889';X.lineWidth=0.5;X.stroke();
-    X.strokeStyle='#667';X.lineWidth=Math.max(1,sz*0.018);
-    X.beginPath();X.moveTo(-sz*.2,0);X.lineTo(-sz*.26,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.2,0);X.lineTo(sz*.26,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.26,-sz*.03);X.lineTo(-sz*.26,sz*.03);X.stroke();
-    X.beginPath();X.moveTo(sz*.26,-sz*.03);X.lineTo(sz*.26,sz*.03);X.stroke();
-  }else{
-    X.fillStyle=c;X.beginPath();
-    X.ellipse(0,-sz*.04,sz*.11,sz*.24,0,0,Math.PI*2);X.fill();
-    X.strokeStyle='#aab';X.lineWidth=1;X.stroke();
-    X.fillStyle='#aaddff';X.globalAlpha=0.4;X.beginPath();X.ellipse(0,-sz*.18,sz*.08,sz*.07,0,0,Math.PI*2);X.fill();X.globalAlpha=1;
-    X.fillStyle='#556';X.fillRect(-sz*.02,sz*.15,sz*.04,sz*.28);
-    X.beginPath();X.arc(0,sz*.45,sz*.04,0,Math.PI*2);X.fillStyle='#666';X.fill();X.strokeStyle='#888';X.lineWidth=0.5;X.stroke();
-    X.strokeStyle='#666';X.lineWidth=Math.max(1,sz*0.02);
-    X.beginPath();X.moveTo(-sz*.22,0);X.lineTo(-sz*.28,0);X.stroke();
-    X.beginPath();X.moveTo(sz*.22,0);X.lineTo(sz*.28,0);X.stroke();
-    X.beginPath();X.moveTo(-sz*.28,-sz*.04);X.lineTo(-sz*.28,sz*.04);X.stroke();
-    X.beginPath();X.moveTo(sz*.28,-sz*.04);X.lineTo(sz*.28,sz*.04);X.stroke();
+  var sy2=Math.sin(droneYaw),cyaw2=Math.cos(droneYaw);
+  var sp=Math.sin(dronePitch),cp2=Math.cos(dronePitch);
+  var sr=Math.sin(droneRoll),cr=Math.cos(droneRoll);
+
+  function rot(x,y,z){
+    var y1=y*cp2-z*sp,z1=y*sp+z*cp2;
+    var x2=x*cr-y1*sr,y2=x*sr+y1*cr;
+    var x3=x2*cyaw2+z1*sy2,z3=-x2*sy2+z1*cyaw2;
+    return[droneX+x3,droneY+y2,droneZ+z3];
+  }
+  function p3(a){return project(a[0],a[1],a[2],cx,cy,cz,cyaw,cpitch);}
+  function drawLine(a,b,col,w){
+    var sa=p3(a),sb=p3(b);
+    if(sa&&sb&&sa.z<150&&sb.z<150){
+      X.strokeStyle=col;X.lineWidth=w||1.5;
+      X.beginPath();X.moveTo(sa.x,sa.y);X.lineTo(sb.x,sb.y);X.stroke();
+    }
+  }
+  function drawFace(pts,col,sc){
+    var sp=pts.map(p3);
+    if(sp.some(function(p){return !p||p.z>150;}))return;
+    X.fillStyle=col;if(sc)X.globalAlpha=sc;
+    X.beginPath();X.moveTo(sp[0].x,sp[0].y);
+    for(var i=1;i<sp.length;i++)X.lineTo(sp[i].x,sp[i].y);
+    X.closePath();X.fill();if(sc)X.globalAlpha=1;
   }
 
-  var rotorY=-sz*.4;
-  X.strokeStyle='#777';X.lineWidth=Math.max(1,sz*0.015);
-  X.beginPath();X.moveTo(0,-sz*.15);X.lineTo(0,rotorY);X.stroke();
-  X.fillStyle='#888';X.beginPath();X.arc(0,rotorY,sz*.02,0,Math.PI*2);X.fill();
-  var rotA=(raceTime*40)%360*Math.PI/180;
-  var bladeLen=sz*.55;
-  X.globalAlpha=0.45;X.strokeStyle='#0ff';X.lineWidth=Math.max(1.5,sz*0.025);
-  X.beginPath();X.moveTo(-bladeLen*Math.cos(rotA),rotorY-bladeLen*Math.sin(rotA)*0.15);X.lineTo(bladeLen*Math.cos(rotA),rotorY+bladeLen*Math.sin(rotA)*0.15);X.stroke();
-  X.beginPath();X.moveTo(-bladeLen*Math.cos(rotA+Math.PI/2),rotorY-bladeLen*Math.sin(rotA+Math.PI/2)*0.15);X.lineTo(bladeLen*Math.cos(rotA+Math.PI/2),rotorY+bladeLen*Math.sin(rotA+Math.PI/2)*0.15);X.stroke();
-  X.globalAlpha=0.12;X.strokeStyle='#0ff';X.lineWidth=1;
-  X.beginPath();X.ellipse(0,rotorY,bladeLen,bladeLen*0.12,0,0,Math.PI*2);X.stroke();
+  var dim=heliType===2?[0.8,1.8,0.65]:heliType===5?[0.9,2.0,0.7]:heliType===4?[0.5,1.4,0.5]:[0.6,1.6,0.6];
+  var bw=dim[0],bl=dim[1],bh=dim[2];
+  var tl=bl*0.9,tw=bh*0.15;
+
+  var nose=rot(0,0,bl*0.5);
+  var tail=rot(0,0,-bl*0.5-tl);
+  var topF=rot(0,bh*0.5,bl*0.3);
+  var topB=rot(0,bh*0.5,-bl*0.3);
+  var botF=rot(0,-bh*0.5,bl*0.3);
+  var botB=rot(0,-bh*0.5,-bl*0.3);
+  var lF=rot(-bw*0.5,0,bl*0.3);
+  var rF=rot(bw*0.5,0,bl*0.3);
+  var lB=rot(-bw*0.5,0,-bl*0.3);
+  var rB=rot(bw*0.5,0,-bl*0.3);
+  var lFT=rot(-bw*0.3,bh*0.4,bl*0.3);
+  var rFT=rot(bw*0.3,bh*0.4,bl*0.3);
+  var lBT=rot(-bw*0.3,bh*0.4,-bl*0.3);
+  var rBT=rot(bw*0.3,bh*0.4,-bl*0.3);
+
+  drawFace([nose,topF,topB,botB,botF],c,0.85);
+  drawFace([nose,rF,rB,botB,botF],'#000',0.3);
+  drawFace([nose,lF,lB,topB,topF],'#fff',0.15);
+
+  var tailEnd=rot(0,0,-bl*0.5-tl);
+  var tailTop=rot(0,bh*0.2,-bl*0.4);
+  var tailBot=rot(0,-bh*0.2,-bl*0.4);
+  drawLine(tailTop,tailEnd,c,2);
+  drawLine(tailBot,tailEnd,c,2);
+  drawLine(tailTop,tailBot,c,1.5);
+
+  var mastBot=rot(0,bh*0.5,0);
+  var mastTop=rot(0,bh*0.5+bh*0.8,0);
+  drawLine(mastBot,mastTop,'#888',2);
+
+  var hub=mastTop;
+  var rotA=raceTime*35*Math.PI/180;
+  var rLen=bw*1.6;
+  var blade1a=rot(-rLen*Math.cos(rotA),bh*0.5+bh*0.8,-rLen*Math.sin(rotA)*0.08);
+  var blade1b=rot(rLen*Math.cos(rotA),bh*0.5+bh*0.8,rLen*Math.sin(rotA)*0.08);
+  var blade2a=rot(-rLen*Math.sin(rotA),bh*0.5+bh*0.8,rLen*Math.cos(rotA)*0.08);
+  var blade2b=rot(rLen*Math.sin(rotA),bh*0.5+bh*0.8,-rLen*Math.cos(rotA)*0.08);
+
+  X.globalAlpha=0.4;X.strokeStyle='#0ff';X.lineWidth=Math.max(1.5,s0.z*0.001);
+  drawLine(blade1a,blade1b,'#0ff',2);
+  drawLine(blade2a,blade2b,'#0ff',2);
+  X.globalAlpha=0.1;
+  drawLine(blade1a,blade1b,'#0ff',4);
   X.globalAlpha=1;
 
-  X.fillStyle='#f00';X.beginPath();X.arc(sz*.12,sz*.08,sz*.02,0,Math.PI*2);X.fill();
-  X.fillStyle='#0f0';X.beginPath();X.arc(-sz*.12,sz*.08,sz*.02,0,Math.PI*2);X.fill();
+  var trPos=rot(tw*0.5,bh*0.15,-bl*0.5-tl+tw);
+  var trPos2=rot(-tw*0.5,bh*0.15,-bl*0.5-tl+tw);
+  drawLine(trPos,trPos2,'#888',1.5);
 
-  if(keys['ShiftLeft']||keys['ShiftRight']||(jrAct.a&&jrAct.y<-0.3)){
-    X.globalAlpha=0.12;X.fillStyle='#aaa';
-    X.beginPath();X.arc(0,sz*.1,sz*.15,0,Math.PI*2);X.fill();
-    X.globalAlpha=1;
-  }
-  X.restore();
+  var skY=-bh*0.5-0.15;
+  var skF=rot(0,skY,bl*0.2);
+  var skB=rot(0,skY,-bl*0.3);
+  var skFR=rot(bw*0.45,skY,bl*0.2);
+  var skBR=rot(bw*0.45,skY,-bl*0.3);
+  var skFL=rot(-bw*0.45,skY,bl*0.2);
+  var skBL=rot(-bw*0.45,skY,-bl*0.3);
+  drawLine(skFL,skBL,'#555',1.5);
+  drawLine(skFR,skBR,'#555',1.5);
+  drawLine(skF,skFL,'#555',1);drawLine(skF,skFR,'#555',1);
+  drawLine(skB,skBL,'#555',1);drawLine(skB,skBR,'#555',1);
+
+  var wlPos=rot(0,bh*0.25,bl*0.35);
+  var wlb=rot(0,bh*0.1,bl*0.35);
+  var wlR=rot(bw*0.25,bh*0.2,bl*0.32);
+  var wlL=rot(-bw*0.25,bh*0.2,bl*0.32);
+  drawFace([wlPos,wlb,wlR,wlL],'#8ab',0.3);
+
+  drawLine(rot(bw*0.3,-bh*0.1,bl*0.5),rot(bw*0.3,-bh*0.3,bl*0.45),'#f00',2);
+  drawLine(rot(-bw*0.3,-bh*0.1,bl*0.5),rot(-bw*0.3,-bh*0.3,bl*0.45),'#0f0',2);
 }
 
 function drawHeliCockpit(){
