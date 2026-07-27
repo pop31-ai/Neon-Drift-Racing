@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Winter Biathlon - Olympic Edition</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a1628; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+canvas { border-radius: 8px; box-shadow: 0 0 40px rgba(0,150,255,0.3); cursor: crosshair; }
+#ui { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: #fff; text-align: center; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const C = document.getElementById('game');
+const ctx = C.getContext('2d');
+C.width = 1200; C.height = 600;
+
+// --- GAME STATE ---
+const STATE = { MENU: 0, SKI: 1, SHOOT: 2, FINISH: 3, TRANSITION: 4 };
+let state = STATE.MENU;
+let gameTime = 0;
+let penaltyTime = 0;
+let penalties = 0;
+let bestTime = Infinity;
+
+// --- PLAYER ---
+const player = {
+  x: 150, y: 380, vy: 0, vx: 0,
+  stamina: 100, speed: 0, maxSpeed: 5,
+  shooting: false, shootCooldown: 0,
+  skiAngle: 0, armAngle: 0,
+  skiTrail: []
+};
+
+// --- COURSE ---
+const course = {
+  distance: 8000,
+  scrollX: 0,
+  segments: [],
+  shootingRange: { x: 3000, active: false, visited: false },
+  finishLine: 6500,
+  mountains: [],
+  trees: [],
+  snowflakes: []
+};
+
+// --- SHOOTING ---
+const shooting = {
+  targets: [],
+  currentTarget: 0,
+  bullets: 5,
+  maxBullets: 5,
+  hits: 0,
+  aimX: 0, aimY: 0,
+  recoil: 0,
+  shotFlash: 0,
+  targetHit: []
+};
+
+// --- INPUT ---
+const keys = {};
+let mouseX = 0, mouseY = 0, mouseDown = false;
+
+document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+C.addEventListener('mousemove', e => {
+  const r = C.getBoundingClientRect();
+  mouseX = (e.clientX - r.left) * (C.width / r.width);
+  mouseY = (e.clientY - r.top) * (C.height / r.height);
+});
+C.addEventListener('mousedown', e => { mouseDown = true; });
+C.addEventListener('mouseup', e => { mouseDown = false; });
+
+// --- GENERATE WORLD ---
+function generateWorld() {
+  course.mountains = [];
+  for (let i = 0; i < 30; i++) {
+    course.mountains.push({
+      x: i * 400 + Math.random() * 200,
+      h: 80 + Math.random() * 120,
+      w: 200 + Math.random() * 300,
+      shade: Math.random() * 0.3
+    });
+  }
+  course.trees = [];
+  for (let i = 0; i < 120; i++) {
+    course.trees.push({
+      x: Math.random() * course.distance,
+      y: 420 + Math.random() * 60,
+      h: 30 + Math.random() * 40,
+      w: 12 + Math.random() * 10,
+      snow: Math.random() > 0.3
+    });
+  }
+  for (let i = 0; i < 200; i++) {
+    course.snowflakes.push({
+      x: Math.random() * C.width,
+      y: Math.random() * C.height,
+      r: 1 + Math.random() * 3,
+      speed: 0.5 + Math.random() * 1.5,
+      drift: Math.random() * 0.5
+    });
+  }
+}
+
+// --- SHOOTING RANGE ---
+function initShootingRange() {
+  shooting.targets = [];
+  shooting.currentTarget = 0;
+  shooting.bullets = shooting.maxBullets;
+  shooting.hits = 0;
+  shooting.recoil = 0;
+  shooting.shotFlash = 0;
+  shooting.targetHit = [];
+  for (let i = 0; i < 5; i++) {
+    shooting.targets.push({
+      x: 800 + i * 70,
+      y: 200,
+      r: 18,
+      hit: false,
+      fallAngle: 0,
+      wobble: Math.random() * Math.PI * 2
+    });
+    shooting.targetHit.push(false);
+  }
+}
+
+// --- RESET ---
+function resetGame() {
+  player.x = 150; player.y = 380; player.vy = 0; player.vx = 0;
+  player.stamina = 100; player.speed = 0; player.skiAngle = 0;
+  player.skiTrail = [];
+  course.scrollX = 0;
+  course.shootingRange.visited = false;
+  course.shootingRange.active = false;
+  gameTime = 0; penaltyTime = 0; penalties = 0;
+  initShootingRange();
+  state = STATE.SKI;
+}
+
+// --- UPDATE ---
+function update(dt) {
+  if (state === STATE.MENU) {
+    if (keys['Space'] || keys['Enter']) { resetGame(); }
+    updateSnow(dt);
+    return;
+  }
+  if (state === STATE.FINISH) {
+    if (keys['Space'] || keys['Enter']) { state = STATE.MENU; }
+    updateSnow(dt);
+    return;
+  }
+  if (state === STATE.TRANSITION) {
+    gameTime += dt;
+    if (gameTime > 0.5) {
+      if (course.shootingRange.active && !course.shootingRange.visited) {
+        course.shootingRange.visited = true;
+        state = STATE.SHOOT;
+        initShootingRange();
+      } else {
+        state = STATE.SKI;
+      }
+    }
+    updateSnow(dt);
+    return;
+  }
+
+  gameTime += dt;
+  updateSnow(dt);
+
+  if (state === STATE.SKI) {
+    updateSkiing(dt);
+    checkShootingRange();
+    checkFinish();
+  } else if (state === STATE.SHOOT) {
+    updateShooting(dt);
+  }
+}
+
+function updateSnow(dt) {
+  for (let s of course.snowflakes) {
+    s.y += s.speed;
+    s.x += s.drift + Math.sin(gameTime * 2 + s.x) * 0.3;
+    if (s.y > C.height) { s.y = -5; s.x = Math.random() * C.width; }
+    if (s.x > C.width) s.x = 0;
+    if (s.x < 0) s.x = C.width;
+  }
+}
+
+function updateSkiing(dt) {
+  let accelerating = false;
+
+  if (keys['ArrowRight'] || keys['KeyD']) {
+    if (player.stamina > 0) {
+      player.speed = Math.min(player.speed + 0.15, player.maxSpeed);
+      player.stamina = Math.max(0, player.stamina - 0.3);
+      accelerating = true;
+    }
+  }
+  if (keys['ArrowLeft'] || keys['KeyA']) {
+    player.speed = Math.max(player.speed - 0.2, 0);
+  }
+
+  if (!accelerating) {
+    player.speed *= 0.98;
+    player.stamina = Math.min(100, player.stamina + 0.15);
+  }
+
+  if (keys['Space']) {
+    player.speed *= 0.95;
+    player.stamina = Math.min(100, player.stamina + 0.4);
+  }
+
+  player.x += player.speed;
+  course.scrollX += player.speed;
+  player.skiAngle = Math.sin(gameTime * 8) * 0.15 * (player.speed / player.maxSpeed);
+
+  if (player.speed > 0.5 && Math.random() < 0.3) {
+    player.skiTrail.push({
+      x: course.scrollX + player.x - 10,
+      y: player.y + 20,
+      life: 1
+    });
+  }
+  player.skiTrail = player.skiTrail.filter(t => {
+    t.life -= dt * 0.5;
+    return t.life > 0;
+  });
+}
+
+function checkShootingRange() {
+  const range = course.shootingRange;
+  if (!range.visited && course.scrollX + player.x >= range.x - 50) {
+    range.active = true;
+    state = STATE.TRANSITION;
+    gameTime = 0;
+    player.speed = 0;
+  }
+}
+
+function checkFinish() {
+  if (course.scrollX >= course.finishLine) {
+    state = STATE.FINISH;
+    let total = gameTime + penaltyTime;
+    if (total < bestTime) bestTime = total;
+  }
+}
+
+function updateShooting(dt) {
+  shooting.aimX = mouseX;
+  shooting.aimY = mouseY;
+
+  if (shooting.recoil > 0) shooting.recoil -= dt * 8;
+  if (shooting.shotFlash > 0) shooting.shotFlash -= dt * 10;
+
+  for (let i = 0; i < shooting.targets.length; i++) {
+    let t = shooting.targets[i];
+    t.wobble += dt * 2;
+    if (t.hit) {
+      t.fallAngle += dt * 3;
+    }
+  }
+
+  if (mouseDown && shooting.bullets > 0 && shooting.shootCooldown <= 0) {
+    shoot();
+    shooting.shootCooldown = 0.4;
+  }
+  if (shooting.shootCooldown > 0) shooting.shootCooldown -= dt;
+
+  if (shooting.bullets <= 0 || shooting.hits === 5) {
+    setTimeout(() => {
+      penaltyTime += (5 - shooting.hits) * 10;
+      penalties = 5 - shooting.hits;
+      state = STATE.TRANSITION;
+      gameTime = 0;
+    }, 800);
+    shooting.bullets = -1;
+  }
+}
+
+function shoot() {
+  shooting.bullets--;
+  shooting.recoil = 1;
+  shooting.shotFlash = 1;
+
+  for (let i = 0; i < shooting.targets.length; i++) {
+    let t = shooting.targets[i];
+    if (t.hit) continue;
+    const dx = mouseX - t.x;
+    const dy = mouseY - t.y;
+    if (Math.sqrt(dx * dx + dy * dy) < t.r + 8) {
+      t.hit = true;
+      shooting.hits++;
+      shooting.targetHit[i] = true;
+      break;
+    }
+  }
+}
+
+// --- DRAW ---
+function draw() {
+  ctx.clearRect(0, 0, C.width, C.height);
+
+  if (state === STATE.MENU) {
+    drawMenu();
+    return;
+  }
+  if (state === STATE.SHOOT) {
+    drawShooting();
+    return;
+  }
+
+  drawSky();
+  drawMountains();
+  drawSnow();
+  drawGround();
+  drawTrees();
+  drawTrail();
+
+  if (state === STATE.FINISH) {
+    drawFinishBanner();
+  }
+
+  drawPlayer();
+  drawHUD();
+
+  if (state === STATE.TRANSITION) {
+    drawTransition();
+  }
+}
+
+function drawMenu() {
+  const grad = ctx.createLinearGradient(0, 0, 0, C.height);
+  grad.addColorStop(0, '#0a1628');
+  grad.addColorStop(0.5, '#1a3a5c');
+  grad.addColorStop(1, '#e8eef5');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, C.width, C.height);
+
+  for (let s of course.snowflakes) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${0.4 + s.r * 0.2})`;
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 56px "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.fillText('WINTER BIATHLON', C.width / 2, 180);
+
+  ctx.font = '22px "Segoe UI"';
+  ctx.fillStyle = '#8ab4f8';
+  ctx.fillText('Olympic Edition', C.width / 2, 220);
+
+  drawOlympicRings(C.width / 2, 270);
+
+  ctx.fillStyle = '#ccc';
+  ctx.font = '18px "Segoe UI"';
+  ctx.fillText('Гонка по лыжной трассе + стрельба по мишеням', C.width / 2, 330);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px "Segoe UI"';
+  const pulse = 0.7 + Math.sin(Date.now() / 400) * 0.3;
+  ctx.globalAlpha = pulse;
+  ctx.fillText('Нажми SPACE для старта', C.width / 2, 420);
+  ctx.globalAlpha = 1;
+
+  ctx.font = '14px "Segoe UI"';
+  ctx.fillStyle = '#888';
+  ctx.fillText('↑/↓ - палки  |  SPACE - тормоз/отдых  |  ЛКМ - стрелять', C.width / 2, 480);
+}
+
+function drawOlympicRings(cx, cy) {
+  const colors = ['#0085C7', '#000', '#DF0024', '#F4C300', '#009F3D'];
+  const ringR = 18;
+  const gap = 50;
+  for (let i = 0; i < 5; i++) {
+    const x = cx - 100 + i * gap;
+    const y = cy + (i >= 2 ? 18 : 0);
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, 350);
+  grad.addColorStop(0, '#0f2027');
+  grad.addColorStop(0.5, '#203a4f');
+  grad.addColorStop(1, '#4a7c8a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, C.width, 350);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  for (let i = 0; i < 50; i++) {
+    const sx = (i * 137 + 50) % C.width;
+    const sy = (i * 97 + 20) % 200;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 0.5 + (i % 3) * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawMountains() {
+  for (let m of course.mountains) {
+    const mx = m.x - course.scrollX * 0.15;
+    if (mx < -m.w || mx > C.width + m.w) continue;
+
+    const grad = ctx.createLinearGradient(mx, 250 - m.h, mx, 380);
+    grad.addColorStop(0, `rgba(180,200,220,${0.4 + m.shade})`);
+    grad.addColorStop(1, `rgba(140,160,180,${0.2 + m.shade})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(mx - m.w / 2, 380);
+    ctx.lineTo(mx - m.w * 0.1, 250 - m.h);
+    ctx.lineTo(mx + m.w * 0.05, 260 - m.h);
+    ctx.lineTo(mx + m.w / 2, 380);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + m.shade})`;
+    ctx.beginPath();
+    ctx.moveTo(mx - m.w * 0.05, 265 - m.h);
+    ctx.lineTo(mx, 250 - m.h);
+    ctx.lineTo(mx + m.w * 0.1, 265 - m.h);
+    ctx.fill();
+  }
+}
+
+function drawGround() {
+  const grad = ctx.createLinearGradient(0, 380, 0, C.height);
+  grad.addColorStop(0, '#d0dde8');
+  grad.addColorStop(0.3, '#c8d8e8');
+  grad.addColorStop(1, '#a8b8c8');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 380, C.width, C.height - 380);
+
+  ctx.strokeStyle = 'rgba(180,200,220,0.4)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 20; i++) {
+    const ly = 390 + i * 10;
+    ctx.beginPath();
+    ctx.moveTo(0, ly);
+    for (let x = 0; x < C.width; x += 30) {
+      ctx.lineTo(x, ly + Math.sin((x + course.scrollX * 0.5) * 0.05 + i) * 2);
+    }
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(150,170,190,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 410);
+  ctx.lineTo(C.width, 410);
+  ctx.stroke();
+
+  if (course.scrollX + C.width > course.shootingRange.x - 100 && course.scrollX < course.shootingRange.x + 600) {
+    drawShootingRangeMarker();
+  }
+
+  if (course.scrollX + C.width > course.finishLine - 50) {
+    const fx = course.finishLine - course.scrollX;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(fx - 2, 350, 4, 60);
+    ctx.fillRect(fx - 30, 345, 60, 8);
+
+    for (let i = 0; i < 6; i++) {
+      for (let j = 0; j < 2; j++) {
+        ctx.fillStyle = (i + j) % 2 === 0 ? '#111' : '#fff';
+        ctx.fillRect(fx - 30 + i * 10, 345 + j * 4, 10, 4);
+      }
+    }
+  }
+}
+
+function drawShootingRangeMarker() {
+  const rx = course.shootingRange.x - course.scrollX;
+  ctx.fillStyle = 'rgba(255,50,50,0.15)';
+  ctx.fillRect(rx, 350, 400, 70);
+
+  ctx.fillStyle = '#d32f2f';
+  ctx.font = 'bold 14px "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.fillText('SHOTING RANGE', rx + 200, 345);
+}
+
+function drawTrees() {
+  for (let t of course.trees) {
+    const tx = t.x - course.scrollX * 0.8;
+    if (tx < -50 || tx > C.width + 50) continue;
+
+    ctx.fillStyle = '#2d5016';
+    ctx.beginPath();
+    ctx.moveTo(tx, t.y);
+    ctx.lineTo(tx - t.w, t.y);
+    ctx.lineTo(tx - t.w * 0.3, t.y - t.h);
+    ctx.lineTo(tx + t.w * 0.3, t.y - t.h);
+    ctx.lineTo(tx + t.w, t.y);
+    ctx.fill();
+
+    ctx.fillStyle = '#1a3a0a';
+    ctx.beginPath();
+    ctx.moveTo(tx, t.y - t.h * 0.5);
+    ctx.lineTo(tx - t.w * 0.7, t.y - t.h * 0.5 + t.h * 0.15);
+    ctx.lineTo(tx + t.w * 0.7, t.y - t.h * 0.5 + t.h * 0.15);
+    ctx.fill();
+
+    if (t.snow) {
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath();
+      ctx.ellipse(tx, t.y - t.h * 0.15, t.w * 0.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawTrail() {
+  for (let t of player.skiTrail) {
+    const tx = t.x - course.scrollX;
+    if (tx < -20 || tx > C.width + 20) continue;
+    ctx.fillStyle = `rgba(180,190,200,${t.life * 0.3})`;
+    ctx.fillRect(tx, t.y - 1, 15, 2);
+  }
+}
+
+function drawPlayer() {
+  const px = player.x;
+  const py = player.y;
+  const lean = player.skiAngle;
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(lean);
+
+  // Skis
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-25, 18);
+  ctx.lineTo(25, 18);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-25, 22);
+  ctx.lineTo(25, 22);
+  ctx.stroke();
+
+  // Ski tips
+  ctx.beginPath();
+  ctx.arc(25, 18, 3, -0.5, 0.5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(25, 22, 3, -0.5, 0.5);
+  ctx.stroke();
+
+  // Boots
+  ctx.fillStyle = '#222';
+  ctx.fillRect(-5, 14, 10, 6);
+
+  // Legs
+  ctx.fillStyle = '#1a237e';
+  ctx.fillRect(-4, 0, 4, 16);
+  ctx.fillRect(1, 0, 4, 16);
+
+  // Body
+  ctx.fillStyle = '#c62828';
+  ctx.fillRect(-7, -18, 14, 20);
+
+  // Number bib
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-5, -14, 10, 10);
+  ctx.fillStyle = '#c62828';
+  ctx.font = 'bold 8px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('7', 0, -6);
+
+  // Arms with poles
+  const armSwing = Math.sin(gameTime * 8) * 0.4 * (player.speed / player.maxSpeed + 0.3);
+
+  ctx.strokeStyle = '#1a237e';
+  ctx.lineWidth = 3;
+
+  // Left arm
+  ctx.save();
+  ctx.translate(-7, -12);
+  ctx.rotate(-0.3 + armSwing);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-12, 15);
+  ctx.stroke();
+  // Pole
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-12, 15);
+  ctx.lineTo(-15, 30);
+  ctx.stroke();
+  ctx.restore();
+
+  // Right arm
+  ctx.strokeStyle = '#1a237e';
+  ctx.lineWidth = 3;
+  ctx.save();
+  ctx.translate(7, -12);
+  ctx.rotate(0.3 - armSwing);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(12, 15);
+  ctx.stroke();
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(12, 15);
+  ctx.lineTo(15, 30);
+  ctx.stroke();
+  ctx.restore();
+
+  // Head
+  ctx.fillStyle = '#ffcc80';
+  ctx.beginPath();
+  ctx.arc(0, -24, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hat
+  ctx.fillStyle = '#c62828';
+  ctx.beginPath();
+  ctx.arc(0, -26, 8, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-8, -26, 16, 3);
+
+  // Goggles
+  ctx.fillStyle = '#1565c0';
+  ctx.fillRect(-6, -25, 12, 4);
+  ctx.fillStyle = 'rgba(100,200,255,0.4)';
+  ctx.fillRect(-5, -24.5, 10, 3);
+
+  ctx.restore();
+}
+
+function drawShooting() {
+  // Shooting range background
+  const grad = ctx.createLinearGradient(0, 0, 0, C.height);
+  grad.addColorStop(0, '#1a2a3a');
+  grad.addColorStop(0.6, '#2a4a5a');
+  grad.addColorStop(1, '#c8d8e8');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, C.width, C.height);
+
+  // Snow ground
+  ctx.fillStyle = '#d0dde8';
+  ctx.fillRect(0, 450, C.width, 150);
+
+  // Targets
+  for (let i = 0; i < shooting.targets.length; i++) {
+    let t = shooting.targets[i];
+    const tx = t.x;
+    const ty = t.y + Math.sin(t.wobble) * 3;
+
+    // Target stand
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(tx - 2, ty + t.r, 4, 250);
+
+    // Target plate
+    if (t.hit) {
+      ctx.save();
+      ctx.translate(tx, ty);
+      ctx.rotate(t.fallAngle);
+      ctx.fillStyle = '#555';
+      ctx.beginPath();
+      ctx.arc(0, 0, t.r, 0, Math.PI * 2);
+      ctx.fill();
+      // Hit mark
+      ctx.fillStyle = '#ff5722';
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      // Black target
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.arc(tx, ty, t.r, 0, Math.PI * 2);
+      ctx.fill();
+      // White ring
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(tx, ty, t.r * 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+      // Red center
+      ctx.fillStyle = '#d32f2f';
+      ctx.beginPath();
+      ctx.arc(tx, ty, t.r * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (i === shooting.currentTarget && !t.hit) {
+        ctx.strokeStyle = 'rgba(255,255,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(tx, ty, t.r + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Prone position - player lying down
+  const plx = 300, ply = 430;
+  ctx.save();
+  ctx.translate(plx, ply);
+
+  // Body prone
+  ctx.fillStyle = '#c62828';
+  ctx.fillRect(-30, -8, 50, 12);
+
+  // Legs
+  ctx.fillStyle = '#1a237e';
+  ctx.fillRect(-45, -5, 18, 8);
+
+  // Head
+  ctx.fillStyle = '#ffcc80';
+  ctx.beginPath();
+  ctx.arc(22, -8, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hat
+  ctx.fillStyle = '#c62828';
+  ctx.beginPath();
+  ctx.arc(22, -10, 8, Math.PI, 0);
+  ctx.fill();
+
+  // Rifle
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(15, -5);
+  ctx.lineTo(60, -5 - shooting.recoil * 5);
+  ctx.stroke();
+
+  // Scope
+  ctx.fillStyle = '#222';
+  ctx.fillRect(35, -10, 12, 5);
+
+  // Barrel flash
+  if (shooting.shotFlash > 0) {
+    ctx.fillStyle = `rgba(255,200,50,${shooting.shotFlash})`;
+    ctx.beginPath();
+    ctx.arc(62, -5, 8 + shooting.shotFlash * 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Crosshair
+  ctx.strokeStyle = 'rgba(255,50,50,0.8)';
+  ctx.lineWidth = 1.5;
+  const cr = 15;
+  ctx.beginPath();
+  ctx.moveTo(mouseX - cr, mouseY);
+  ctx.lineTo(mouseX - 5, mouseY);
+  ctx.moveTo(mouseX + 5, mouseY);
+  ctx.lineTo(mouseX + cr, mouseY);
+  ctx.moveTo(mouseX, mouseY - cr);
+  ctx.lineTo(mouseX, mouseY - 5);
+  ctx.moveTo(mouseX, mouseY + 5);
+  ctx.lineTo(mouseX, mouseY + cr);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,50,50,0.4)';
+  ctx.beginPath();
+  ctx.arc(mouseX, mouseY, cr + 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // HUD for shooting
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(C.width / 2 - 150, 10, 300, 60);
+  ctx.strokeStyle = '#c62828';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(C.width / 2 - 150, 10, 300, 60);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 20px "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.fillText('STANDING POSITION - SHOOT!', C.width / 2, 35);
+
+  // Bullets
+  ctx.font = '16px "Segoe UI"';
+  ctx.fillStyle = '#ffd700';
+  let bulletText = 'Патроны: ';
+  for (let i = 0; i < shooting.maxBullets; i++) {
+    bulletText += i < shooting.bullets ? '● ' : '○ ';
+  }
+  ctx.fillText(bulletText, C.width / 2 - 50, 58);
+
+  // Hits
+  ctx.fillStyle = '#4caf50';
+  ctx.fillText(`Попадания: ${shooting.hits}/5`, C.width / 2 + 80, 58);
+
+  // Penalties info
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(10, 10, 200, 35);
+  ctx.fillStyle = '#ff9800';
+  ctx.font = '14px "Segoe UI"';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Промахи: ${shooting.maxBullets - shooting.hits} × 10 сек`, 20, 32);
+}
+
+function drawSnow() {
+  for (let s of course.snowflakes) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + s.r * 0.15})`;
+    ctx.fill();
+  }
+}
+
+function drawHUD() {
+  // Top bar
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, C.width, 50);
+
+  // Time
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 20px "Segoe UI"';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Время: ${gameTime.toFixed(1)}с`, 20, 33);
+
+  // Penalty
+  if (penaltyTime > 0) {
+    ctx.fillStyle = '#ff5722';
+    ctx.fillText(`+${penaltyTime}с штраф`, 220, 33);
+  }
+
+  // Stamina bar
+  ctx.fillStyle = '#333';
+  ctx.fillRect(C.width / 2 - 100, 15, 200, 20);
+  const stColor = player.stamina > 50 ? '#4caf50' : player.stamina > 20 ? '#ff9800' : '#f44336';
+  ctx.fillStyle = stColor;
+  ctx.fillRect(C.width / 2 - 100, 15, player.stamina * 2, 20);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(C.width / 2 - 100, 15, 200, 20);
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Выносливость: ${Math.round(player.stamina)}%`, C.width / 2, 30);
+
+  // Distance
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#8ab4f8';
+  ctx.font = 'bold 16px "Segoe UI"';
+  const dist = Math.min(100, Math.round(course.scrollX / course.finishLine * 100));
+  ctx.fillText(`${dist}% дистанции`, C.width - 20, 33);
+
+  // Progress bar
+  ctx.fillStyle = '#333';
+  ctx.fillRect(10, C.height - 25, C.width - 20, 12);
+  ctx.fillStyle = '#1565c0';
+  ctx.fillRect(10, C.height - 25, (course.scrollX / course.finishLine) * (C.width - 20), 12);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(10, C.height - 25, C.width - 20, 12);
+
+  // Shooting range indicator
+  if (!course.shootingRange.visited) {
+    const rangeScreenX = course.shootingRange.x - course.scrollX;
+    if (rangeScreenX > 0 && rangeScreenX < C.width) {
+      ctx.fillStyle = 'rgba(255,50,50,0.8)';
+      ctx.font = 'bold 12px "Segoe UI"';
+      ctx.textAlign = 'center';
+      ctx.fillText('▼ СТРЕЛЬБИЩЕ ▼', rangeScreenX, C.height - 40);
+    }
+  }
+
+  // Controls hint
+  if (gameTime < 5) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(C.width / 2 - 200, C.height - 80, 400, 30);
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px "Segoe UI"';
+    ctx.textAlign = 'center';
+    ctx.fillText('→ - палки  |  SPACE - тормоз/отдых  |  ЛКМ - стрелять', C.width / 2, C.height - 60);
+  }
+}
+
+function drawTransition() {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, C.width, C.height);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 36px "Segoe UI"';
+  ctx.textAlign = 'center';
+  if (course.shootingRange.active && !course.shootingRange.visited) {
+    ctx.fillText('ПОДХОД К СТРЕЛЬБИЩУ!', C.width / 2, C.height / 2);
+    ctx.font = '18px "Segoe UI"';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Приготовься стрелять по мишеням', C.width / 2, C.height / 2 + 40);
+  } else {
+    ctx.fillText('ПРОДОЛЖАЕМ ГОНКУ!', C.width / 2, C.height / 2);
+  }
+}
+
+function drawFinishBanner() {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, C.width, C.height);
+
+  drawOlympicRings(C.width / 2, 120);
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 48px "Segoe UI"';
+  ctx.textAlign = 'center';
+  ctx.fillText('ФИНИШ!', C.width / 2, 220);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '24px "Segoe UI"';
+  ctx.fillText(`Время гонки: ${gameTime.toFixed(1)}с`, C.width / 2, 280);
+
+  if (penalties > 0) {
+    ctx.fillStyle = '#ff5722';
+    ctx.fillText(`Штраф за промахи: +${penaltyTime}с`, C.width / 2, 320);
+  }
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 28px "Segoe UI"';
+  const total = gameTime + penaltyTime;
+  ctx.fillText(`ИТОГО: ${total.toFixed(1)}с`, C.width / 2, 380);
+
+  if (bestTime < Infinity && total <= bestTime) {
+    ctx.fillStyle = '#4caf50';
+    ctx.font = 'bold 20px "Segoe UI"';
+    ctx.fillText('★ НОВЫЙ ЛУЧШИЙ РЕЗУЛЬТАТ! ★', C.width / 2, 420);
+  }
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '16px "Segoe UI"';
+  ctx.fillText('Нажми SPACE для новой гонки', C.width / 2, 480);
+}
+
+// --- MAIN LOOP ---
+let lastTime = 0;
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  update(dt);
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+generateWorld();
+initShootingRange();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
